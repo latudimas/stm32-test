@@ -21,6 +21,8 @@ library, no C library: every register is set by hand from the reference manual.
 | ST-Link V2.1 probe | e.g. WeAct Mini Debugger (SWD + USB-UART) |
 
 ### Wiring
+![Wiring diagram: OLED SCL/SDA to PB6/PB7, ST-Link SWD to the Blue Pill SWD header, ST-Link RXD to PA9](docs/wiring.svg)
+
 | From | To (Blue Pill) |
 |---|---|
 | OLED SCL | PB6 |

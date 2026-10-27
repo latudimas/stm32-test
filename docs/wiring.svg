@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 500" width="940" height="500" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <title>stm32-test wiring: Blue Pill, SSD1306 OLED, ST-Link V2.1</title>
+  <rect width="940" height="500" fill="#ffffff"/>
+
+  <!-- ===== Wires (drawn first so boards sit on top of the ends) ===== -->
+  <g fill="none" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- OLED -> Blue Pill top header -->
+    <polyline points="70,172 70,230 330,230 330,262"  stroke="#222222"/> <!-- GND -->
+    <polyline points="120,172 120,220 380,220 380,262" stroke="#d62828"/> <!-- VCC -> 3.3 -->
+    <polyline points="170,172 170,210 430,210 430,262" stroke="#e0a000"/> <!-- SCL -> PB6 -->
+    <polyline points="220,172 220,200 480,200 480,262" stroke="#1f77b4"/> <!-- SDA -> PB7 -->
+    <!-- ST-Link -> Blue Pill -->
+    <polyline points="720,192 720,225 560,225 560,262" stroke="#e76f00"/> <!-- RXD -> PA9 -->
+    <polyline points="760,192 760,300 662,300" stroke="#d62828"/>          <!-- 3V3 -> 3.3 -->
+    <polyline points="800,192 800,330 662,330" stroke="#2a9d38"/>          <!-- SWDIO -> DIO -->
+    <polyline points="840,192 840,360 662,360" stroke="#8e44ad"/>          <!-- SWCLK -> CLK -->
+    <polyline points="880,192 880,390 662,390" stroke="#222222"/>          <!-- GND -> GND -->
+  </g>
+
+  <!-- ===== SSD1306 OLED ===== -->
+  <rect x="40" y="40" width="220" height="132" rx="8" fill="#1d3557" stroke="#0b1d33" stroke-width="2"/>
+  <rect x="62" y="56" width="176" height="70" rx="3" fill="#000000"/>
+  <text x="150" y="96" fill="#9fd8ff" font-size="13" text-anchor="middle">HELLO WORLD</text>
+  <text x="150" y="25" fill="#222" font-size="14" font-weight="bold" text-anchor="middle">SSD1306 OLED 128x64 (I2C 0x3C)</text>
+  <g fill="#e9eef5" font-size="11" text-anchor="middle">
+    <text x="70" y="160">GND</text><text x="120" y="160">VCC</text>
+    <text x="170" y="160">SCL</text><text x="220" y="160">SDA</text>
+  </g>
+  <g fill="#c9a227" stroke="#7a6212">
+    <rect x="65" y="166" width="10" height="10"/><rect x="115" y="166" width="10" height="10"/>
+    <rect x="165" y="166" width="10" height="10"/><rect x="215" y="166" width="10" height="10"/>
+  </g>
+
+  <!-- ===== ST-Link V2.1 ===== -->
+  <rect x="700" y="40" width="200" height="152" rx="8" fill="#5b5f66" stroke="#33363b" stroke-width="2"/>
+  <text x="800" y="25" fill="#222" font-size="14" font-weight="bold" text-anchor="middle">ST-Link V2.1 (WeAct)</text>
+  <text x="800" y="90" fill="#ffffff" font-size="12" text-anchor="middle">USB-C to Mac</text>
+  <text x="800" y="108" fill="#d0d4da" font-size="10" text-anchor="middle">SWD + USB-UART</text>
+  <g fill="#ffffff" font-size="10" text-anchor="middle">
+    <text x="720" y="178">RXD</text><text x="760" y="178">3V3</text><text x="800" y="178">SWDIO</text>
+    <text x="840" y="178">SWCLK</text><text x="880" y="178">GND</text>
+  </g>
+  <g fill="#c9a227" stroke="#7a6212">
+    <rect x="715" y="186" width="10" height="10"/><rect x="755" y="186" width="10" height="10"/>
+    <rect x="795" y="186" width="10" height="10"/><rect x="835" y="186" width="10" height="10"/>
+    <rect x="875" y="186" width="10" height="10"/>
+  </g>
+
+  <!-- ===== Blue Pill ===== -->
+  <rect x="300" y="262" width="360" height="150" rx="8" fill="#1e5fbf" stroke="#103a78" stroke-width="2"/>
+  <rect x="440" y="320" width="70" height="70" rx="4" fill="#1a1a1a"/>
+  <text x="475" y="352" fill="#bbbbbb" font-size="10" text-anchor="middle">STM32</text>
+  <text x="475" y="366" fill="#bbbbbb" font-size="10" text-anchor="middle">F103</text>
+  <text x="380" y="438" fill="#222" font-size="14" font-weight="bold" text-anchor="middle">STM32F103 Blue Pill</text>
+  <text x="380" y="456" fill="#555" font-size="11" text-anchor="middle">BOOT0 = 0, BOOT1 = 0</text>
+  <!-- top header -->
+  <g fill="#c9a227" stroke="#7a6212">
+    <rect x="325" y="257" width="10" height="10"/><rect x="375" y="257" width="10" height="10"/>
+    <rect x="425" y="257" width="10" height="10"/><rect x="475" y="257" width="10" height="10"/>
+    <rect x="555" y="257" width="10" height="10"/>
+  </g>
+  <g fill="#ffffff" font-size="11" text-anchor="middle">
+    <text x="330" y="284">GND</text><text x="380" y="284">3.3</text>
+    <text x="430" y="284">PB6</text><text x="480" y="284">PB7</text><text x="560" y="284">PA9</text>
+  </g>
+  <g fill="#cfe0ff" font-size="9" text-anchor="middle">
+    <text x="430" y="296">I2C1 SCL</text><text x="480" y="308">I2C1 SDA</text>
+    <text x="560" y="296">USART1 TX</text>
+  </g>
+  <!-- SWD header (short edge) -->
+  <rect x="640" y="285" width="20" height="120" rx="3" fill="#174c99"/>
+  <g fill="#c9a227" stroke="#7a6212">
+    <rect x="655" y="295" width="10" height="10"/><rect x="655" y="325" width="10" height="10"/>
+    <rect x="655" y="355" width="10" height="10"/><rect x="655" y="385" width="10" height="10"/>
+  </g>
+  <g fill="#ffffff" font-size="11" text-anchor="end">
+    <text x="636" y="304">3.3</text><text x="636" y="334">DIO</text>
+    <text x="636" y="364">CLK</text><text x="636" y="394">GND</text>
+  </g>
+  <text x="636" y="318" fill="#cfe0ff" font-size="9" text-anchor="end">SWD</text>
+
+  <!-- ===== Notes ===== -->
+  <g fill="#444" font-size="11">
+    <text x="40" y="478">• OLED pin order varies between modules: follow the silkscreen, not the position.</text>
+    <text x="40" y="494">• Power from the probe's 3V3 or the Blue Pill USB, not both. NRST (probe) → R (board) is optional.</text>
+  </g>
+</svg>
