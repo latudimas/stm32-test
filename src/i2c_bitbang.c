@@ -1,7 +1,7 @@
 /*
  * Bit-banged I2C. Lines are open-drain: writing 1 releases the line (the
- * pull-up makes it high), writing 0 pulls it low. Timing per I2C spec
- * (UM10204) standard mode; we run well below 100 kHz.
+ * pull-up makes it high), writing 0 pulls it low. Standard-mode timing
+ * (UM10204), ~100 kHz.
  */
 #include "i2c.h"
 #include "stm32f103.h"
@@ -112,14 +112,6 @@ int i2c_write_byte(uint8_t b)
     int ack = !sda_read();
     scl_low();
     delay_us(I2C_HALF_US);
-    return ack;
-}
-
-int i2c_probe(uint8_t addr7)
-{
-    i2c_start();
-    int ack = i2c_write_byte((uint8_t)(addr7 << 1)); /* R/W bit 0 = write */
-    i2c_stop();
     return ack;
 }
 

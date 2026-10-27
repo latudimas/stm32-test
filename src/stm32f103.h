@@ -129,8 +129,4 @@
 #define USART_CR1_TE    (1u << 3)  /* transmitter enable */
 #define USART_CR1_UE    (1u << 13) /* USART enable */
 
-/* Device electronic signature — RM0008 §30.1 */
-#define FLASH_SIZE_KB   (*(volatile uint16_t *)0x1FFFF7E0u) /* §30.1.1 flash size in KB */
-#define UID_BASE        0x1FFFF7E8u                         /* §30.1.2 96-bit unique ID */
-
 #endif

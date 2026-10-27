@@ -17,7 +17,6 @@ int i2c_bus_idle(void);        /* 1 if the bus is free */
 void i2c_start(void);
 void i2c_stop(void);
 int i2c_write_byte(uint8_t b); /* returns 1 on ACK, 0 on NACK/error */
-int i2c_probe(uint8_t addr7);  /* START, addr+W, STOP; 1 if a device ACKs */
 
 /* Bulk send that can run in the background, then STOP. Call after
  * i2c_start() + i2c_write_byte(addr) (+ any prefix bytes). `buf` must stay

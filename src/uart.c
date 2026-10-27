@@ -70,10 +70,3 @@ void uart_put_u32(uint32_t v)
     }
 }
 
-void uart_put_hex32(uint32_t v)
-{
-    for (int shift = 28; shift >= 0; shift -= 4) {
-        uart_putc("0123456789abcdef"[(v >> shift) & 0xFu]);
-    }
-}
-

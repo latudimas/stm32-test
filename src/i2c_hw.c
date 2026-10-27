@@ -42,8 +42,6 @@ static volatile int dma_result = I2C_DONE;
 static uint32_t dma_start_ms;
 static uint32_t dma_timeout_ms;
 
-volatile uint32_t i2c_dma_irqs; /* debug: DMA interrupts taken (read via OpenOCD/GDB) */
-
 /* Bounded wait for the last byte after DMA TC, usable inside the interrupt
  * (millis() doesn't advance there). One byte at 400 kHz is ~23 us = ~1700
  * cycles at 72 MHz; 20000 loop iterations is several times that. */
@@ -217,14 +215,6 @@ int i2c_write_byte(uint8_t b)
     return sr1 && !clear_errors(sr1);
 }
 
-int i2c_probe(uint8_t addr7)
-{
-    i2c_start();
-    int ack = i2c_write_byte((uint8_t)(addr7 << 1)); /* R/W bit 0 = write */
-    i2c_stop();
-    return ack;
-}
-
 /* Master transmitter with DMA, RM0008 §26.3.7 "DMA requests":
  * DMA fills DR on every TXE; when the DMA count reaches 0 (TC) the last byte
  * is only in DR/the shift register, so wait for BTF before STOP (EV8_2). */
@@ -259,9 +249,8 @@ void i2c_write_async(const uint8_t *buf, uint32_t len)
  * finish (safe in the interrupt); the next i2c_start() waits for it instead. */
 static void dma_finish(int result)
 {
-    /* RM0008 §26.6.2 I2C_CR2: DMAEN=0; §13.4.3 DMA_CCR6: EN=0. Only EN is
-     * cleared: writing all of CCR while the channel is enabled was observed to
-     * leave the other bits set anyway, and i2c_write_async() rewrites them. */
+    /* RM0008 §26.6.2 I2C_CR2: DMAEN=0; §13.4.3 DMA_CCR6: EN=0. The other CCR
+     * bits are rewritten by the next i2c_write_async(). */
     I2C1_CR2 &= ~I2C_CR2_DMAEN;
     DMA1_CCR6 &= ~DMA_CCR_EN;
     DMA1_IFCR = DMA_IFCR_CGIF6;
@@ -274,8 +263,6 @@ static void dma_finish(int result)
  * byte to I2C1 (TC) or hit a bus error (TE). */
 void DMA1_Channel6_IRQHandler(void)
 {
-    i2c_dma_irqs++;
-
     /* RM0008 §13.4.1 DMA_ISR */
     uint32_t isr = DMA1_ISR;
     if (dma_result != I2C_BUSY) {
