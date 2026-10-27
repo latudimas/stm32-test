@@ -130,7 +130,7 @@ Power the Blue Pill from the debugger's 3V3 **or** its USB, not both.
 3. **I2C ACK**: send address 0x3C, check ACK (blink pattern or inspect in GDB) → proves wiring + I2C. Bit-banged driver in `src/i2c.c` (with 9-clock bus recovery at init). 0x3C ACKs (only device on bus) — first seen with SCL/SDA wires physically swapped; firmware keeps PB6=SCL / PB7=SDA (needed for hardware I2C1 later). Results in RAM globals `i2c_bus_ok`, `oled_ack`, `i2c_found[4]`; LED slow blink = ACK, fast = NACK, off = bus stuck.
 4. **Display on**: init sequence, fill screen white → proves SSD1306 init. Driver in `src/ssd1306.c` (init + 1024-byte framebuffer + flush). All init/flush bytes ACKed over 3 resets (`oled_init_ok`, `oled_flush_ok`); user confirmed whole screen lit white.
 5. **Hello world**: render text from font into framebuffer. Full ASCII 5x7 font in `src/font5x7.c` (475 B), `ssd1306_draw_char/_string` (page-aligned, 6 px cell). "HELLO WORLD" at x=31, page 3; framebuffer dump over SWD renders the text correctly; user confirmed on screen.
-6. (Optional) USART1 debug prints through the debugger's UART bridge.
+6. (Optional) USART1 debug prints through the debugger's UART bridge. ✅ `src/uart.c`: TX-only, polled, PA9 AF push-pull, BRR=69 (115942 baud from 8 MHz, +0.64%). Wired PA9 → debugger RXD. Boot log (chip info, I2C/OLED results) + `tick N` every ~4 s; captured on `/dev/cu.usbmodem1102`. If the clock changes (e.g. 72 MHz), BRR must be recomputed.
 7. (Optional) Port to Rust.
 
 ## Key references
