@@ -19,4 +19,9 @@ int ssd1306_init(void);              /* 1 if every byte was ACKed */
 void ssd1306_fill(uint8_t pattern);  /* set every framebuffer byte */
 int ssd1306_flush(void);             /* send the whole framebuffer; 1 on success */
 
+/* Text, 5x7 font in a 6-pixel cell. Rows are page-aligned: page 0..7 = y 0, 8, .. 56.
+ * Characters outside 0x20..0x7E draw as '?'; anything past column 127 is clipped. */
+void ssd1306_draw_char(uint32_t x, uint32_t page, char c);
+void ssd1306_draw_string(uint32_t x, uint32_t page, const char *s);
+
 #endif

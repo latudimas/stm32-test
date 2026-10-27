@@ -5,6 +5,7 @@
  * (internal charge pump: 8Dh 14h before AFh).
  */
 #include "ssd1306.h"
+#include "font5x7.h"
 #include "i2c.h"
 
 /* I2C control byte (datasheet §8.1.5.2): Co=0 (no more control bytes follow,
@@ -68,4 +69,31 @@ int ssd1306_flush(void)
     };
     return send(CTRL_CMD, window, sizeof window) &&
            send(CTRL_DATA, ssd1306_fb, SSD1306_FB_SIZE);
+}
+
+void ssd1306_draw_char(uint32_t x, uint32_t page, char c)
+{
+    if (page >= SSD1306_HEIGHT / 8u) {
+        return;
+    }
+    uint8_t ch = (uint8_t)c;
+    if (ch < FONT_FIRST || ch > FONT_LAST) {
+        ch = '?';
+    }
+    const uint8_t *glyph = font5x7[ch - FONT_FIRST];
+
+    /* A glyph column and a framebuffer byte have the same layout (bit 0 = top),
+     * so drawing on a page boundary is a straight copy. */
+    uint8_t *row = &ssd1306_fb[page * SSD1306_WIDTH];
+    for (uint32_t col = 0; col < FONT_W && x + col < SSD1306_WIDTH; col++) {
+        row[x + col] = glyph[col];
+    }
+}
+
+void ssd1306_draw_string(uint32_t x, uint32_t page, const char *s)
+{
+    /* 5 columns of glyph + 1 blank column between characters. */
+    for (; *s && x < SSD1306_WIDTH; s++, x += FONT_W + 1u) {
+        ssd1306_draw_char(x, page, *s);
+    }
 }

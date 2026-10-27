@@ -7,7 +7,7 @@ GDB     = arm-none-eabi-gdb
 
 BUILD = build
 TARGET = $(BUILD)/firmware
-SRCS = src/startup.c src/main.c src/i2c.c src/ssd1306.c
+SRCS = src/startup.c src/main.c src/i2c.c src/ssd1306.c src/font5x7.c
 OBJS = $(SRCS:src/%.c=$(BUILD)/%.o)
 LDSCRIPT = stm32f103.ld
 
