@@ -1,27 +1,28 @@
 /*
- * Milestone 3: check the SSD1306 ACKs its I2C address (0x3C).
+ * Milestone 4: initialise the SSD1306 and light every pixel.
  * Runs on the reset clock: HSI 8 MHz (RM0008 §7.2), no clock setup needed.
  *
  * Result on the PC13 LED (active low):
- *   slow blink, 2 s on / 2 s off  -> 0x3C ACKed
- *   fast blink, ~0.1 s            -> no ACK (check wiring / address)
+ *   slow blink, 2 s on / 2 s off  -> init + flush ACKed; screen should be all white
+ *   fast blink, ~0.1 s            -> a byte was NACKed
  *   LED stays off                 -> bus not idle (a line stuck low / no pull-ups)
  * The same results are in the globals below, readable from GDB/OpenOCD.
  */
 #include "delay.h"
 #include "i2c.h"
+#include "ssd1306.h"
 #include "stm32f103.h"
 
 #define LED_PIN 13u
-#define OLED_ADDR 0x3Cu
 
 /* ~10 CPU cycles per delay() iteration at 8 MHz (measured) -> 1.6M iterations ~= 2 s. */
 #define BLINK_SLOW 1600000u
 #define BLINK_FAST 80000u
+#define POWER_UP_DELAY 80000u /* ~100 ms for the OLED's supply to settle */
 
-volatile uint32_t i2c_bus_ok;   /* 1 = SCL and SDA high at idle */
-volatile uint32_t oled_ack;     /* 1 = device at OLED_ADDR ACKed */
-volatile uint32_t i2c_found[4]; /* bitmap of every 7-bit address that ACKed */
+volatile uint32_t i2c_bus_ok; /* 1 = SCL and SDA high at idle */
+volatile uint32_t oled_init_ok;  /* 1 = every init command byte ACKed */
+volatile uint32_t oled_flush_ok; /* 1 = whole framebuffer ACKed */
 
 static void led_init(void)
 {
@@ -44,6 +45,7 @@ int main(void)
 {
     led_init();
     led_off();
+    delay(POWER_UP_DELAY);
     i2c_init();
 
     i2c_bus_ok = i2c_bus_idle();
@@ -52,17 +54,11 @@ int main(void)
         }
     }
 
-    oled_ack = i2c_probe(OLED_ADDR);
+    oled_init_ok = ssd1306_init();
+    ssd1306_fill(0xFF);
+    oled_flush_ok = ssd1306_flush();
 
-    /* Scan the valid 7-bit range too, so a module strapped to 0x3D (or a
-     * wiring swap) is visible from the debugger. */
-    for (uint8_t a = 0x08; a <= 0x77; a++) {
-        if (i2c_probe(a)) {
-            i2c_found[a / 32u] |= 1u << (a % 32u);
-        }
-    }
-
-    uint32_t period = oled_ack ? BLINK_SLOW : BLINK_FAST;
+    uint32_t period = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW : BLINK_FAST;
     for (;;) {
         led_on();
         delay(period);
