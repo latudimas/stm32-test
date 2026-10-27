@@ -127,7 +127,7 @@ Power the Blue Pill from the debugger's 3V3 **or** its USB, not both.
 ## Milestones (each verifiable)
 1. **Toolchain + probe**: OpenOCD detects Cortex-M3. ✅ **DONE 2026-10-27** — "Cortex-M3 r1p1 processor detected", 3.25 V.
 2. **Blink PC13** (onboard LED, active low) → proves startup, linker script, RCC, GPIO. ✅ **Flashed 2026-10-27** — ODR bit 13 toggles ~every 0.5 s (read via OpenOCD). `make` / `make flash` / `make openocd` + `make gdb`.
-3. **I2C ACK**: send address 0x3C, check ACK (blink pattern or inspect in GDB) → proves wiring + I2C.
+3. **I2C ACK**: send address 0x3C, check ACK (blink pattern or inspect in GDB) → proves wiring + I2C. Bit-banged driver in `src/i2c.c` (with 9-clock bus recovery at init). 0x3C ACKs (only device on bus) — first seen with SCL/SDA wires physically swapped; firmware keeps PB6=SCL / PB7=SDA (needed for hardware I2C1 later). Results in RAM globals `i2c_bus_ok`, `oled_ack`, `i2c_found[4]`; LED slow blink = ACK, fast = NACK, off = bus stuck.
 4. **Display on**: init sequence, fill screen white → proves SSD1306 init.
 5. **Hello world**: render text from font into framebuffer.
 6. (Optional) USART1 debug prints through the debugger's UART bridge.
