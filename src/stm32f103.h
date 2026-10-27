@@ -17,6 +17,11 @@
 #define STK_CTRL_TICKINT   (1u << 1)     /* exception 15 on reaching 0 */
 #define STK_CTRL_CLKSOURCE (1u << 2)     /* 1 = processor clock (AHB), 0 = AHB/8 */
 
+/* NVIC — Cortex-M3 core interrupt controller, PM0056 §4.3. IRQ n is enabled by
+ * bit (n % 32) of ISER[n / 32]; IRQ numbers per RM0008 §10.1.2 Table 63. */
+#define NVIC_ISER0      REG(0xE000E100u) /* §4.3.2 set-enable, IRQ 0..31 */
+#define DMA1_CH6_IRQn   16u
+
 /* RCC — RM0008 §7.3, base 0x40021000 */
 #define RCC_BASE        0x40021000u
 #define RCC_CR          REG(RCC_BASE + 0x00) /* §7.3.1 clock control */
@@ -107,6 +112,8 @@
 #define DMA_ISR_TEIF6   (1u << 23) /* channel 6 transfer error */
 #define DMA_IFCR_CGIF6  (1u << 20) /* clear all channel 6 flags */
 #define DMA_CCR_EN      (1u << 0)
+#define DMA_CCR_TCIE    (1u << 1)  /* interrupt on transfer complete */
+#define DMA_CCR_TEIE    (1u << 3)  /* interrupt on transfer error */
 #define DMA_CCR_DIR     (1u << 4)  /* 1 = memory -> peripheral */
 #define DMA_CCR_MINC    (1u << 7)  /* increment memory address */
 #define DMA_CCR_PL_HIGH (2u << 12) /* channel priority */

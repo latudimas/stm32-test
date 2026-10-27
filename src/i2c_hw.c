@@ -17,7 +17,8 @@
  *
  * Bulk data (i2c_write_async) goes through DMA1 channel 6: each time I2C1
  * raises TXE, the DMA controller copies the next byte from RAM into I2C1_DR
- * by itself, so the CPU is free until the transfer ends.
+ * by itself. The DMA transfer-complete interrupt (DMA1_Channel6_IRQHandler)
+ * then sends the STOP, so the transfer finishes with no help from main().
  */
 #include "i2c.h"
 #include "clock.h"
@@ -35,11 +36,18 @@ const char i2c_driver[] = "hw I2C1 400 kHz";
 /* Set while a START has been sent but the address byte hasn't. */
 static int expect_addr;
 
-/* DMA transfer state for i2c_write_async()/i2c_write_poll(). */
-enum { DMA_IDLE, DMA_SENDING, DMA_DRAINING };
-static int dma_state = DMA_IDLE;
+/* Shared between i2c_write_async()/i2c_write_poll() (thread) and the DMA
+ * interrupt: I2C_BUSY while the DMA transfer runs, then I2C_DONE or I2C_ERR. */
+static volatile int dma_result = I2C_DONE;
 static uint32_t dma_start_ms;
 static uint32_t dma_timeout_ms;
+
+volatile uint32_t i2c_dma_irqs; /* debug: DMA interrupts taken (read via OpenOCD/GDB) */
+
+/* Bounded wait for the last byte after DMA TC, usable inside the interrupt
+ * (millis() doesn't advance there). One byte at 400 kHz is ~23 us = ~1700
+ * cycles at 72 MHz; 20000 loop iterations is several times that. */
+#define BTF_SPIN_LIMIT 20000u
 
 static void set_pins(uint32_t cfg)
 {
@@ -124,6 +132,10 @@ void i2c_init(void)
     /* RM0008 §13.4.5 DMA_CPAR6: the channel always writes into I2C1_DR. */
     DMA1_CPAR6 = (uint32_t)&I2C1_DR;
 
+    /* PM0056 §4.3.2 NVIC_ISER0: enable IRQ 16 (DMA1 channel 6). Priority is
+     * left at the reset value 0, same as SysTick, so neither preempts the other. */
+    NVIC_ISER0 = 1u << DMA1_CH6_IRQn;
+
     bus_recover();
 
     /* Pins to I2C1: RM0008 §9.1.11 Table 27 — I2C SCL/SDA = alternate-function
@@ -158,6 +170,12 @@ int i2c_bus_idle(void)
 
 void i2c_start(void)
 {
+    /* The DMA interrupt sets STOP without waiting for it to go out; make sure
+     * it has (CR1.STOP cleared by hardware) before asking for a new START. */
+    uint32_t start = millis();
+    while ((I2C1_CR1 & I2C_CR1_STOP) && millis() - start <= TIMEOUT_MS) {
+    }
+
     /* RM0008 §26.6.1 I2C_CR1: START=1, then EV5: wait for SR1.SB. */
     I2C1_CR1 |= I2C_CR1_START;
     expect_addr = wait_sr1(I2C_SR1_SB) & I2C_SR1_SB;
@@ -219,22 +237,27 @@ void i2c_write_async(const uint8_t *buf, uint32_t len)
     /* RM0008 §13.4.6 DMA_CMAR6 / §13.4.4 DMA_CNDTR6: source and byte count. */
     DMA1_CMAR6 = (uint32_t)buf;
     DMA1_CNDTR6 = len;
+
+    /* 400 kHz = ~23 us per byte; allow double that plus margin. Set state
+     * before enabling anything: the interrupt may fire right away for short buffers. */
+    dma_start_ms = millis();
+    dma_timeout_ms = 2u + len / 20u;
+    dma_result = I2C_BUSY;
+
     /* RM0008 §13.4.3 DMA_CCR6: memory -> peripheral, memory address
-     * increments, 8-bit on both sides, high priority, then enable. */
-    DMA1_CCR6 = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_PL_HIGH;
+     * increments, 8-bit on both sides, high priority, interrupts on transfer
+     * complete and transfer error, then enable. */
+    DMA1_CCR6 = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_PL_HIGH | DMA_CCR_TCIE | DMA_CCR_TEIE;
     DMA1_CCR6 |= DMA_CCR_EN;
 
     /* RM0008 §26.6.2 I2C_CR2: DMAEN=1 — TXE now raises DMA requests. TXE is
      * already set (previous byte done), so the first request fires at once. */
     I2C1_CR2 |= I2C_CR2_DMAEN;
-
-    /* 400 kHz = ~23 us per byte; allow double that plus margin. */
-    dma_start_ms = millis();
-    dma_timeout_ms = 2u + len / 20u;
-    dma_state = DMA_SENDING;
 }
 
-static int dma_finish(int result)
+/* Stop the DMA side and put a STOP on the bus. Doesn't wait for the STOP to
+ * finish (safe in the interrupt); the next i2c_start() waits for it instead. */
+static void dma_finish(int result)
 {
     /* RM0008 §26.6.2 I2C_CR2: DMAEN=0; §13.4.3 DMA_CCR6: EN=0. Only EN is
      * cleared: writing all of CCR while the channel is enabled was observed to
@@ -243,29 +266,53 @@ static int dma_finish(int result)
     DMA1_CCR6 &= ~DMA_CCR_EN;
     DMA1_IFCR = DMA_IFCR_CGIF6;
     clear_errors(I2C1_SR1);
-    i2c_stop();
-    dma_state = DMA_IDLE;
-    return result;
+    I2C1_CR1 |= I2C_CR1_STOP;
+    dma_result = result;
 }
 
+/* IRQ 16, vector 32 (startup.c). Runs when DMA1 channel 6 has handed the last
+ * byte to I2C1 (TC) or hit a bus error (TE). */
+void DMA1_Channel6_IRQHandler(void)
+{
+    i2c_dma_irqs++;
+
+    /* RM0008 §13.4.1 DMA_ISR */
+    uint32_t isr = DMA1_ISR;
+    if (dma_result != I2C_BUSY) {
+        DMA1_IFCR = DMA_IFCR_CGIF6; /* late flag after a timeout abort */
+        return;
+    }
+    if (isr & DMA_ISR_TEIF6) {
+        dma_finish(I2C_ERR);
+        return;
+    }
+    if (isr & DMA_ISR_TCIF6) {
+        /* EV8_2: last byte still shifting out — wait for BTF (or a NACK). */
+        for (uint32_t i = 0; i < BTF_SPIN_LIMIT; i++) {
+            uint32_t sr1 = I2C1_SR1;
+            if (sr1 & I2C_SR1_BTF) {
+                dma_finish(I2C_DONE);
+                return;
+            }
+            if (sr1 & (I2C_SR1_AF | I2C_SR1_BERR | I2C_SR1_ARLO)) {
+                break;
+            }
+        }
+        dma_finish(I2C_ERR);
+    }
+}
+
+/* Completion is handled by the interrupt; this only reports it, and gives up
+ * if the interrupt never comes (e.g. a NACK stalls TXE so the DMA never ends). */
 int i2c_write_poll(void)
 {
-    if (dma_state == DMA_IDLE) {
-        return I2C_DONE;
+    if (dma_result == I2C_BUSY && millis() - dma_start_ms > dma_timeout_ms) {
+        /* Mask interrupts so the IRQ can't finish the transfer at the same time. */
+        __asm volatile("cpsid i" ::: "memory");
+        if (dma_result == I2C_BUSY) {
+            dma_finish(I2C_ERR);
+        }
+        __asm volatile("cpsie i" ::: "memory");
     }
-
-    /* RM0008 §26.6.6 I2C_SR1 / §13.4.1 DMA_ISR */
-    uint32_t sr1 = I2C1_SR1;
-    if ((sr1 & (I2C_SR1_AF | I2C_SR1_BERR | I2C_SR1_ARLO)) || (DMA1_ISR & DMA_ISR_TEIF6) ||
-        millis() - dma_start_ms > dma_timeout_ms) {
-        return dma_finish(I2C_ERR);
-    }
-
-    if (dma_state == DMA_SENDING && (DMA1_ISR & DMA_ISR_TCIF6)) {
-        dma_state = DMA_DRAINING; /* all bytes handed to I2C1, last one still on the wire */
-    }
-    if (dma_state == DMA_DRAINING && (sr1 & I2C_SR1_BTF)) {
-        return dma_finish(I2C_DONE);
-    }
-    return I2C_BUSY;
+    return dma_result;
 }

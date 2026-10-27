@@ -28,6 +28,8 @@
  * the text row closest to the vertical middle. */
 #define MESSAGE_X ((SSD1306_WIDTH - (sizeof MESSAGE - 1u) * 6u) / 2u)
 #define MESSAGE_PAGE 3u
+#define TICK_X    MESSAGE_X
+#define TICK_PAGE 6u
 
 volatile uint32_t i2c_bus_ok; /* 1 = SCL and SDA high at idle */
 volatile uint32_t oled_init_ok;  /* 1 = every init command byte ACKed */
@@ -54,6 +56,25 @@ static void log_result(const char *what, uint32_t ok)
 {
     uart_puts(what);
     uart_puts(ok ? ": ok\n" : ": FAIL\n");
+}
+
+/* "TICK 123" into out (needs 16 bytes). */
+static void format_tick(uint32_t n, char *out)
+{
+    const char *prefix = "TICK ";
+    while (*prefix) {
+        *out++ = *prefix++;
+    }
+    char digits[10];
+    int k = 0;
+    do {
+        digits[k++] = (char)('0' + n % 10u);
+        n /= 10u;
+    } while (n);
+    while (k) {
+        *out++ = digits[--k];
+    }
+    *out = '\0';
 }
 
 static void log_chip_info(void)
@@ -123,11 +144,24 @@ int main(void)
 
     uint32_t period = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW_MS : BLINK_FAST_MS;
     for (uint32_t tick = 0;; tick++) {
+        /* The previous screen update was started 4 s ago and never polled;
+         * the DMA interrupt finished it (and sent the STOP) in the background. */
+        int prev = ssd1306_flush_poll();
+
         uart_puts("tick ");
         uart_put_u32(tick);
         uart_puts(" at ");
         uart_put_u32(millis());
-        uart_puts(" ms\n");
+        uart_puts(prev == I2C_DONE ? " ms, last screen update ok\n"
+                                   : " ms, last screen update FAILED\n");
+
+        /* Safe to touch the framebuffer now: no transfer is in progress. */
+        char text[16];
+        format_tick(tick, text);
+        ssd1306_draw_string(TICK_X, TICK_PAGE, "          "); /* clear old number */
+        ssd1306_draw_string(TICK_X, TICK_PAGE, text);
+        ssd1306_flush_start(); /* returns at once; finishes during delay_ms() below */
+
         led_on();
         delay_ms(period);
         led_off();
