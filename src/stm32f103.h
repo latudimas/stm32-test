@@ -37,6 +37,8 @@
 #define RCC_CFGR_PLLXTPRE   (1u << 17)       /* 1 = HSE/2 into PLL */
 #define RCC_CFGR_PLLMUL_MASK (0xFu << 18)
 #define RCC_CFGR_PLLMUL_X9  (7u << 18)       /* 0111 = x9 */
+#define RCC_AHBENR      REG(RCC_BASE + 0x14) /* §7.3.6 AHB peripheral clock enable */
+#define RCC_AHBENR_DMA1EN  (1u << 0)         /* DMA1 clock enable */
 #define RCC_APB2ENR     REG(RCC_BASE + 0x18) /* §7.3.7 APB2 peripheral clock enable */
 #define RCC_APB1ENR     REG(RCC_BASE + 0x1C) /* §7.3.8 APB1 peripheral clock enable */
 #define RCC_APB1ENR_I2C1EN (1u << 21)        /* I2C1 clock enable */
@@ -90,6 +92,25 @@
 #define I2C_SR1_AF      (1u << 10) /* acknowledge failure (NACK) */
 #define I2C_SR2_BUSY    (1u << 1)  /* bus busy (SDA or SCL low seen) */
 #define I2C_CCR_FS      (1u << 15) /* 1 = fast mode (400 kHz) */
+#define I2C_CR2_DMAEN   (1u << 11) /* DMA request on TXE/RXNE */
+
+/* DMA1 — RM0008 §13.4, base 0x40020000 (AHB). I2C1_TX is hard-wired to
+ * channel 6 (§13.3.7 Table 78 "Summary of DMA1 requests for each channel"). */
+#define DMA1_BASE       0x40020000u
+#define DMA1_ISR        REG(DMA1_BASE + 0x00) /* §13.4.1 interrupt status */
+#define DMA1_IFCR       REG(DMA1_BASE + 0x04) /* §13.4.2 interrupt flag clear */
+#define DMA1_CCR6       REG(DMA1_BASE + 0x6C) /* §13.4.3 channel 6 configuration */
+#define DMA1_CNDTR6     REG(DMA1_BASE + 0x70) /* §13.4.4 channel 6 number of data */
+#define DMA1_CPAR6      REG(DMA1_BASE + 0x74) /* §13.4.5 channel 6 peripheral address */
+#define DMA1_CMAR6      REG(DMA1_BASE + 0x78) /* §13.4.6 channel 6 memory address */
+#define DMA_ISR_TCIF6   (1u << 21) /* channel 6 transfer complete */
+#define DMA_ISR_TEIF6   (1u << 23) /* channel 6 transfer error */
+#define DMA_IFCR_CGIF6  (1u << 20) /* clear all channel 6 flags */
+#define DMA_CCR_EN      (1u << 0)
+#define DMA_CCR_DIR     (1u << 4)  /* 1 = memory -> peripheral */
+#define DMA_CCR_MINC    (1u << 7)  /* increment memory address */
+#define DMA_CCR_PL_HIGH (2u << 12) /* channel priority */
+/* PSIZE/MSIZE = 00 (8-bit), PINC = 0, CIRC = 0, MEM2MEM = 0: all left at zero. */
 
 /* USART1 — RM0008 §27.6, base 0x40013800 */
 #define USART1_BASE     0x40013800u

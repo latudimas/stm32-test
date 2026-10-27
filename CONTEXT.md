@@ -139,6 +139,8 @@ Extra (done): **72 MHz clock** — `src/clock.c`: HSE 8 MHz (on-board crystal, v
 
 Extra (done): **Hardware I2C1** — `src/i2c_hw.c`, same API as `src/i2c_bitbang.c` (renamed from `i2c.c`); pick with `make I2C=hw|bitbang` (default `hw`; `build/config` stamp forces relink on switch). Fast mode 400 kHz from APB1 36 MHz: CR2 FREQ=36, CCR=0x801E (F/S, 30), TRISE=11; PB6/PB7 AF open-drain 50 MHz. Polled; every byte waits BTF or AF so ACK is reported per byte and SCL is stretched between bytes (interrupt-safe). 2 ms timeout on every wait. Init does GPIO 9-clock bus recovery + STOP, then SWRST (ES0340 BUSY-lock workaround). Full-screen flush: **24 ms hw** vs 117 ms bit-bang (both at 72 MHz); 10/10 resets OK.
 
+Extra (done): **DMA for the framebuffer** — DMA1 channel 6 (hard-wired to I2C1_TX) copies `ssd1306_fb` into I2C1_DR on each TXE. API: `i2c_write_async(buf,len)` + `i2c_write_poll()` (I2C_BUSY/DONE/ERR; sends STOP itself after DMA TC then BTF); bit-bang driver implements it synchronously. `ssd1306_flush_start()/_poll()` + blocking `ssd1306_flush()`. Polled (no DMA interrupt/NVIC yet). Measured: 23 ms flush, CPU ran 14785 loop iterations meanwhile (bit-bang: 0); 10/10 resets OK. Observed: writing `DMA_CCR6 = 0` while enabled only clears EN — finish clears EN explicitly, CCR6 reads 0x2090 afterwards (harmless).
+
 ## Key references
 - RM0008 — STM32F101/102/103 reference manual (RCC, GPIO, I2C, memory map)
 - STM32F103x8/xB datasheet (pinout, AF mapping)

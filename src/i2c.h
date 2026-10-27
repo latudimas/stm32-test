@@ -19,4 +19,15 @@ void i2c_stop(void);
 int i2c_write_byte(uint8_t b); /* returns 1 on ACK, 0 on NACK/error */
 int i2c_probe(uint8_t addr7);  /* START, addr+W, STOP; 1 if a device ACKs */
 
+/* Bulk send that can run in the background, then STOP. Call after
+ * i2c_start() + i2c_write_byte(addr) (+ any prefix bytes). `buf` must stay
+ * unchanged until i2c_write_poll() stops returning I2C_BUSY.
+ *   hw:      DMA1 channel 6 feeds I2C1, the CPU is free meanwhile
+ *   bitbang: sends everything inside i2c_write_async(); poll returns at once */
+#define I2C_BUSY 0
+#define I2C_DONE 1
+#define I2C_ERR  (-1)
+void i2c_write_async(const uint8_t *buf, uint32_t len);
+int i2c_write_poll(void);      /* I2C_BUSY while sending, then I2C_DONE or I2C_ERR */
+
 #endif

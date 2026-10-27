@@ -59,7 +59,7 @@ void ssd1306_fill(uint8_t pattern)
     }
 }
 
-int ssd1306_flush(void)
+int ssd1306_flush_start(void)
 {
     /* Reset the write window to the full screen so the 1024 bytes land at
      * column 0, page 0 and wrap through all 8 pages (horizontal mode). */
@@ -67,8 +67,35 @@ int ssd1306_flush(void)
         0x21, 0, SSD1306_WIDTH - 1,         /* column address: 0..127 */
         0x22, 0, SSD1306_HEIGHT / 8u - 1,   /* page address: 0..7 */
     };
-    return send(CTRL_CMD, window, sizeof window) &&
-           send(CTRL_DATA, ssd1306_fb, SSD1306_FB_SIZE);
+    if (!send(CTRL_CMD, window, sizeof window)) {
+        return 0;
+    }
+
+    /* Header bytes go out synchronously; the 1024-byte body is handed to
+     * i2c_write_async(), which also sends the STOP when it's done. */
+    i2c_start();
+    if (!i2c_write_byte((uint8_t)(SSD1306_ADDR << 1)) || !i2c_write_byte(CTRL_DATA)) {
+        i2c_stop();
+        return 0;
+    }
+    i2c_write_async(ssd1306_fb, SSD1306_FB_SIZE);
+    return 1;
+}
+
+int ssd1306_flush_poll(void)
+{
+    return i2c_write_poll();
+}
+
+int ssd1306_flush(void)
+{
+    if (!ssd1306_flush_start()) {
+        return 0;
+    }
+    int r;
+    while ((r = ssd1306_flush_poll()) == I2C_BUSY) {
+    }
+    return r == I2C_DONE;
 }
 
 void ssd1306_draw_char(uint32_t x, uint32_t page, char c)

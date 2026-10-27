@@ -14,6 +14,10 @@
  * the current byte is transferred" timing issue.
  *
  * Every wait has a timeout so a stuck bus can't hang the firmware.
+ *
+ * Bulk data (i2c_write_async) goes through DMA1 channel 6: each time I2C1
+ * raises TXE, the DMA controller copies the next byte from RAM into I2C1_DR
+ * by itself, so the CPU is free until the transfer ends.
  */
 #include "i2c.h"
 #include "clock.h"
@@ -30,6 +34,12 @@ const char i2c_driver[] = "hw I2C1 400 kHz";
 
 /* Set while a START has been sent but the address byte hasn't. */
 static int expect_addr;
+
+/* DMA transfer state for i2c_write_async()/i2c_write_poll(). */
+enum { DMA_IDLE, DMA_SENDING, DMA_DRAINING };
+static int dma_state = DMA_IDLE;
+static uint32_t dma_start_ms;
+static uint32_t dma_timeout_ms;
 
 static void set_pins(uint32_t cfg)
 {
@@ -105,9 +115,14 @@ static int clear_errors(uint32_t sr1)
 
 void i2c_init(void)
 {
-    /* RM0008 §7.3.7 RCC_APB2ENR: IOPBEN=1; §7.3.8 RCC_APB1ENR: I2C1EN=1. */
+    /* RM0008 §7.3.7 RCC_APB2ENR: IOPBEN=1; §7.3.8 RCC_APB1ENR: I2C1EN=1;
+     * §7.3.6 RCC_AHBENR: DMA1EN=1. */
     RCC_APB2ENR |= RCC_APB2ENR_IOPBEN;
     RCC_APB1ENR |= RCC_APB1ENR_I2C1EN;
+    RCC_AHBENR |= RCC_AHBENR_DMA1EN;
+
+    /* RM0008 §13.4.5 DMA_CPAR6: the channel always writes into I2C1_DR. */
+    DMA1_CPAR6 = (uint32_t)&I2C1_DR;
 
     bus_recover();
 
@@ -190,4 +205,67 @@ int i2c_probe(uint8_t addr7)
     int ack = i2c_write_byte((uint8_t)(addr7 << 1)); /* R/W bit 0 = write */
     i2c_stop();
     return ack;
+}
+
+/* Master transmitter with DMA, RM0008 §26.3.7 "DMA requests":
+ * DMA fills DR on every TXE; when the DMA count reaches 0 (TC) the last byte
+ * is only in DR/the shift register, so wait for BTF before STOP (EV8_2). */
+void i2c_write_async(const uint8_t *buf, uint32_t len)
+{
+    /* RM0008 §13.4.3 DMA_CCR6: channel off while it's being set up. */
+    DMA1_CCR6 = 0;
+    /* RM0008 §13.4.2 DMA_IFCR: clear old channel 6 flags. */
+    DMA1_IFCR = DMA_IFCR_CGIF6;
+    /* RM0008 §13.4.6 DMA_CMAR6 / §13.4.4 DMA_CNDTR6: source and byte count. */
+    DMA1_CMAR6 = (uint32_t)buf;
+    DMA1_CNDTR6 = len;
+    /* RM0008 §13.4.3 DMA_CCR6: memory -> peripheral, memory address
+     * increments, 8-bit on both sides, high priority, then enable. */
+    DMA1_CCR6 = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_PL_HIGH;
+    DMA1_CCR6 |= DMA_CCR_EN;
+
+    /* RM0008 §26.6.2 I2C_CR2: DMAEN=1 — TXE now raises DMA requests. TXE is
+     * already set (previous byte done), so the first request fires at once. */
+    I2C1_CR2 |= I2C_CR2_DMAEN;
+
+    /* 400 kHz = ~23 us per byte; allow double that plus margin. */
+    dma_start_ms = millis();
+    dma_timeout_ms = 2u + len / 20u;
+    dma_state = DMA_SENDING;
+}
+
+static int dma_finish(int result)
+{
+    /* RM0008 §26.6.2 I2C_CR2: DMAEN=0; §13.4.3 DMA_CCR6: EN=0. Only EN is
+     * cleared: writing all of CCR while the channel is enabled was observed to
+     * leave the other bits set anyway, and i2c_write_async() rewrites them. */
+    I2C1_CR2 &= ~I2C_CR2_DMAEN;
+    DMA1_CCR6 &= ~DMA_CCR_EN;
+    DMA1_IFCR = DMA_IFCR_CGIF6;
+    clear_errors(I2C1_SR1);
+    i2c_stop();
+    dma_state = DMA_IDLE;
+    return result;
+}
+
+int i2c_write_poll(void)
+{
+    if (dma_state == DMA_IDLE) {
+        return I2C_DONE;
+    }
+
+    /* RM0008 §26.6.6 I2C_SR1 / §13.4.1 DMA_ISR */
+    uint32_t sr1 = I2C1_SR1;
+    if ((sr1 & (I2C_SR1_AF | I2C_SR1_BERR | I2C_SR1_ARLO)) || (DMA1_ISR & DMA_ISR_TEIF6) ||
+        millis() - dma_start_ms > dma_timeout_ms) {
+        return dma_finish(I2C_ERR);
+    }
+
+    if (dma_state == DMA_SENDING && (DMA1_ISR & DMA_ISR_TCIF6)) {
+        dma_state = DMA_DRAINING; /* all bytes handed to I2C1, last one still on the wire */
+    }
+    if (dma_state == DMA_DRAINING && (sr1 & I2C_SR1_BTF)) {
+        return dma_finish(I2C_DONE);
+    }
+    return I2C_BUSY;
 }

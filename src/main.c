@@ -101,13 +101,25 @@ int main(void)
     log_result("oled init", oled_init_ok);
     ssd1306_fill(0x00);
     ssd1306_draw_string(MESSAGE_X, MESSAGE_PAGE, MESSAGE);
+
+    /* Background flush: count how much other work the CPU gets done while
+     * the 1024 bytes are on the wire (0 with the bit-bang driver). */
     uint32_t t0 = millis();
-    oled_flush_ok = ssd1306_flush();
+    uint32_t cpu_free_loops = 0;
+    int r = I2C_ERR;
+    if (ssd1306_flush_start()) {
+        while ((r = ssd1306_flush_poll()) == I2C_BUSY) {
+            cpu_free_loops++; /* stand-in for real work */
+        }
+    }
     uint32_t flush_ms = millis() - t0;
+    oled_flush_ok = (r == I2C_DONE);
     log_result("oled flush", oled_flush_ok);
     uart_puts("flush time: ");
     uart_put_u32(flush_ms);
-    uart_puts(" ms\n");
+    uart_puts(" ms, cpu free loops during flush: ");
+    uart_put_u32(cpu_free_loops);
+    uart_putc('\n');
 
     uint32_t period = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW_MS : BLINK_FAST_MS;
     for (uint32_t tick = 0;; tick++) {

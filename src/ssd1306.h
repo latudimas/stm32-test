@@ -19,6 +19,11 @@ int ssd1306_init(void);              /* 1 if every byte was ACKed */
 void ssd1306_fill(uint8_t pattern);  /* set every framebuffer byte */
 int ssd1306_flush(void);             /* send the whole framebuffer; 1 on success */
 
+/* Background flush (DMA with the hw I2C driver). Don't touch ssd1306_fb until
+ * ssd1306_flush_poll() stops returning I2C_BUSY (0); then I2C_DONE (1) or I2C_ERR (-1). */
+int ssd1306_flush_start(void);       /* 1 if the transfer started */
+int ssd1306_flush_poll(void);
+
 /* Text, 5x7 font in a 6-pixel cell. Rows are page-aligned: page 0..7 = y 0, 8, .. 56.
  * Characters outside 0x20..0x7E draw as '?'; anything past column 127 is clipped. */
 void ssd1306_draw_char(uint32_t x, uint32_t page, char c);

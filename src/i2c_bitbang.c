@@ -122,3 +122,21 @@ int i2c_probe(uint8_t addr7)
     i2c_stop();
     return ack;
 }
+
+/* No DMA here: do the whole transfer now and hand the result to poll. */
+static int async_result = I2C_DONE;
+
+void i2c_write_async(const uint8_t *buf, uint32_t len)
+{
+    int ok = 1;
+    for (uint32_t i = 0; ok && i < len; i++) {
+        ok = i2c_write_byte(buf[i]);
+    }
+    i2c_stop();
+    async_result = ok ? I2C_DONE : I2C_ERR;
+}
+
+int i2c_write_poll(void)
+{
+    return async_result;
+}
