@@ -133,7 +133,9 @@ Power the Blue Pill from the debugger's 3V3 **or** its USB, not both.
 6. (Optional) USART1 debug prints through the debugger's UART bridge. ✅ `src/uart.c`: TX-only, polled, PA9 AF push-pull, BRR=69 (115942 baud from 8 MHz, +0.64%). Wired PA9 → debugger RXD. Boot log (chip info, I2C/OLED results) + `tick N` every ~4 s; captured on `/dev/cu.usbmodem1102`. If the clock changes (e.g. 72 MHz), BRR must be recomputed.
 7. (Optional) Port to Rust.
 
-Extra (done): **SysTick timebase** — `src/systick.c`: 1 ms interrupt (`millis()`, `delay_ms()`), cycle-counted `delay_us()` for I2C. All timing derives from `CPU_HZ` in `src/stm32f103.h` (also feeds UART BRR). Measured: 4000 ms board / ~3998 ms host per blink cycle (HSI ~0.07% fast). To go 72 MHz: set up HSE+PLL, flash latency, APB1 /2, then change `CPU_HZ`.
+Extra (done): **SysTick timebase** — `src/systick.c`: 1 ms interrupt (`millis()`, `delay_ms()`), cycle-counted `delay_us()` for I2C. All timing derives from `CPU_HZ` in `src/stm32f103.h` (also feeds UART BRR). Measured: 4000 ms board / ~3998 ms host per blink cycle (HSI ~0.07% fast). 
+
+Extra (done): **72 MHz clock** — `src/clock.c`: HSE 8 MHz (on-board crystal, verified starting) → PLL ×9 → 72 MHz; FLASH_ACR 2 WS + prefetch; AHB /1, APB2 /1 (72), APB1 /2 (36). HSE timeout → stays on HSI 8 MHz and logs "HSE FAILED". Clock rates are runtime variables `cpu_hz`, `pclk1_hz`, `pclk2_hz` (`clock.h`); SysTick and UART BRR derive from them (`CPU_HZ` constant removed). `clock_init()` must be first in `main()`. Verified: RCC_CFGR SWS=PLL, PLLMUL=×9, PPRE1=/2; FLASH_ACR=0x32; STK_LOAD=71999; USART1_BRR=625 (exact 115200); host and board both measure 4000–4001 ms per blink cycle.
 
 ## Key references
 - RM0008 — STM32F101/102/103 reference manual (RCC, GPIO, I2C, memory map)

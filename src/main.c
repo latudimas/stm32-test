@@ -1,6 +1,6 @@
 /*
- * Milestone 6: HELLO WORLD on the SSD1306, with debug output on USART1.
- * Runs on the reset clock: HSI 8 MHz (RM0008 §7.2), no clock setup needed.
+ * HELLO WORLD on the SSD1306, with debug output on USART1.
+ * Clock: HSE 8 MHz -> PLL -> 72 MHz (clock.c), falls back to HSI 8 MHz.
  *
  * Serial log (PA9 -> debugger RXD): tio -b 115200 /dev/cu.usbmodem1102
  *
@@ -10,6 +10,7 @@
  *   LED stays off                 -> bus not idle (a line stuck low / no pull-ups)
  * The same results are in the globals below, readable from GDB/OpenOCD.
  */
+#include "clock.h"
 #include "i2c.h"
 #include "ssd1306.h"
 #include "stm32f103.h"
@@ -70,11 +71,16 @@ static void log_chip_info(void)
 
 int main(void)
 {
+    /* Clock first: SysTick, UART and I2C timing are derived from it. */
+    int hse_ok = clock_init();
     led_init();
     led_off();
     systick_init();
     uart_init();
     uart_puts("\n== stm32-test boot ==\n");
+    uart_puts(hse_ok ? "clock: HSE+PLL " : "clock: HSE FAILED, HSI ");
+    uart_put_u32(cpu_hz / 1000000u);
+    uart_puts(" MHz\n");
     log_chip_info();
 
     delay_ms(POWER_UP_MS);

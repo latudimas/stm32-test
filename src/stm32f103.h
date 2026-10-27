@@ -9,10 +9,6 @@
 
 #define REG(addr) (*(volatile uint32_t *)(addr))
 
-/* Core clock. Reset default: HSI 8 MHz, AHB/APB1/APB2 prescalers all /1
- * (RM0008 §7.2, §7.3.2 RCC_CFGR reset value). Change here if the clock setup changes. */
-#define CPU_HZ 8000000u
-
 /* SysTick — Cortex-M3 core timer, PM0056 §4.5 (not in RM0008) */
 #define STK_CTRL        REG(0xE000E010u) /* §4.5.1 control and status */
 #define STK_LOAD        REG(0xE000E014u) /* §4.5.2 reload value (24-bit) */
@@ -23,11 +19,35 @@
 
 /* RCC — RM0008 §7.3, base 0x40021000 */
 #define RCC_BASE        0x40021000u
+#define RCC_CR          REG(RCC_BASE + 0x00) /* §7.3.1 clock control */
+#define RCC_CR_HSEON    (1u << 16)
+#define RCC_CR_HSERDY   (1u << 17)
+#define RCC_CR_PLLON    (1u << 24)
+#define RCC_CR_PLLRDY   (1u << 25)
+#define RCC_CFGR        REG(RCC_BASE + 0x04) /* §7.3.2 clock configuration */
+#define RCC_CFGR_SW_MASK    (3u << 0)        /* system clock switch */
+#define RCC_CFGR_SW_PLL     (2u << 0)
+#define RCC_CFGR_SWS_MASK   (3u << 2)        /* system clock switch status */
+#define RCC_CFGR_SWS_PLL    (2u << 2)
+#define RCC_CFGR_HPRE_MASK  (0xFu << 4)      /* AHB prescaler; 0 = /1 */
+#define RCC_CFGR_PPRE1_MASK (7u << 8)        /* APB1 prescaler */
+#define RCC_CFGR_PPRE1_DIV2 (4u << 8)
+#define RCC_CFGR_PPRE2_MASK (7u << 11)       /* APB2 prescaler; 0 = /1 */
+#define RCC_CFGR_PLLSRC     (1u << 16)       /* 1 = HSE (via PLLXTPRE) */
+#define RCC_CFGR_PLLXTPRE   (1u << 17)       /* 1 = HSE/2 into PLL */
+#define RCC_CFGR_PLLMUL_MASK (0xFu << 18)
+#define RCC_CFGR_PLLMUL_X9  (7u << 18)       /* 0111 = x9 */
 #define RCC_APB2ENR     REG(RCC_BASE + 0x18) /* §7.3.7 APB2 peripheral clock enable */
 #define RCC_APB2ENR_IOPAEN (1u << 2)         /* I/O port A clock enable */
 #define RCC_APB2ENR_IOPBEN (1u << 3)         /* I/O port B clock enable */
 #define RCC_APB2ENR_IOPCEN (1u << 4)         /* I/O port C clock enable */
 #define RCC_APB2ENR_USART1EN (1u << 14)      /* USART1 clock enable */
+
+/* Flash interface — FLASH_ACR, RM0008 §3.3.3 / PM0075 §3.1, base 0x40022000 */
+#define FLASH_ACR       REG(0x40022000u)
+#define FLASH_ACR_LATENCY_MASK (7u << 0)
+#define FLASH_ACR_LATENCY_2    (2u << 0)     /* 2 wait states: 48 < SYSCLK <= 72 MHz */
+#define FLASH_ACR_PRFTBE       (1u << 4)     /* prefetch buffer enable */
 
 /* GPIO — RM0008 §9.2. CRL = pins 0..7, CRH = pins 8..15, 4 bits per pin. */
 #define GPIO_CRL(base)  REG((base) + 0x00) /* §9.2.1 port configuration register low */

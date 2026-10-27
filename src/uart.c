@@ -1,17 +1,13 @@
 /*
- * USART1 TX on PA9. Clocked from APB2 = CPU_HZ (APB2 prescaler /1).
+ * USART1 TX on PA9. Clocked from APB2 (pclk2_hz); call after clock_init().
  */
 #include "uart.h"
+#include "clock.h"
 #include "stm32f103.h"
 
 #define TX_PIN 9u
 
-/* RM0008 §27.3.4: baud = fPCLK / (16 * USARTDIV), BRR holds USARTDIV as 12.4
- * fixed point. 8 MHz / 115200 = 69.44 -> BRR = 69 (0x45: mantissa 4, fraction 5)
- * -> actual 115942 baud, +0.64% error (UART tolerates ~±2%). */
-#define PCLK2_HZ CPU_HZ
-#define BAUD     115200u
-#define BRR_VAL  ((PCLK2_HZ + BAUD / 2u) / BAUD)
+#define BAUD 115200u
 
 void uart_init(void)
 {
@@ -25,8 +21,12 @@ void uart_init(void)
     crh |= (GPIO_AF_PP_2MHZ << ((TX_PIN - 8u) * 4u));
     GPIO_CRH(GPIOA_BASE) = crh;
 
-    /* RM0008 §27.6.3 USART_BRR: 115200 baud from 8 MHz. */
-    USART1_BRR = BRR_VAL;
+    /* RM0008 §27.3.4: baud = fPCLK / (16 * USARTDIV); BRR holds USARTDIV as
+     * 12.4 fixed point, i.e. BRR = fPCLK / baud (rounded).
+     *   72 MHz / 115200 = 625.0  -> BRR = 625 (0x271), exact
+     *    8 MHz / 115200 = 69.44  -> BRR = 69, +0.64% (HSE-failed fallback; UART tolerates ~2%)
+     * RM0008 §27.6.3 USART_BRR. */
+    USART1_BRR = (pclk2_hz + BAUD / 2u) / BAUD;
 
     /* RM0008 §27.6.4 USART_CR1: UE=1, TE=1. M=0 (8 data bits), PCE=0 (no
      * parity); CR2 STOP=00 (1 stop bit) is the reset value. */

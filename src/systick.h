@@ -1,6 +1,6 @@
 /*
  * SysTick timebase: 1 ms interrupt tick + cycle-counted microsecond delays.
- * All timing derives from CPU_HZ (stm32f103.h).
+ * All timing derives from cpu_hz (clock.h); call after clock_init().
  */
 #ifndef SYSTICK_H
 #define SYSTICK_H
