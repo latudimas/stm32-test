@@ -137,6 +137,8 @@ Extra (done): **SysTick timebase** — `src/systick.c`: 1 ms interrupt (`millis(
 
 Extra (done): **72 MHz clock** — `src/clock.c`: HSE 8 MHz (on-board crystal, verified starting) → PLL ×9 → 72 MHz; FLASH_ACR 2 WS + prefetch; AHB /1, APB2 /1 (72), APB1 /2 (36). HSE timeout → stays on HSI 8 MHz and logs "HSE FAILED". Clock rates are runtime variables `cpu_hz`, `pclk1_hz`, `pclk2_hz` (`clock.h`); SysTick and UART BRR derive from them (`CPU_HZ` constant removed). `clock_init()` must be first in `main()`. Verified: RCC_CFGR SWS=PLL, PLLMUL=×9, PPRE1=/2; FLASH_ACR=0x32; STK_LOAD=71999; USART1_BRR=625 (exact 115200); host and board both measure 4000–4001 ms per blink cycle.
 
+Extra (done): **Hardware I2C1** — `src/i2c_hw.c`, same API as `src/i2c_bitbang.c` (renamed from `i2c.c`); pick with `make I2C=hw|bitbang` (default `hw`; `build/config` stamp forces relink on switch). Fast mode 400 kHz from APB1 36 MHz: CR2 FREQ=36, CCR=0x801E (F/S, 30), TRISE=11; PB6/PB7 AF open-drain 50 MHz. Polled; every byte waits BTF or AF so ACK is reported per byte and SCL is stretched between bytes (interrupt-safe). 2 ms timeout on every wait. Init does GPIO 9-clock bus recovery + STOP, then SWRST (ES0340 BUSY-lock workaround). Full-screen flush: **24 ms hw** vs 117 ms bit-bang (both at 72 MHz); 10/10 resets OK.
+
 ## Key references
 - RM0008 — STM32F101/102/103 reference manual (RCC, GPIO, I2C, memory map)
 - STM32F103x8/xB datasheet (pinout, AF mapping)

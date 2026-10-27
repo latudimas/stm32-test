@@ -14,6 +14,8 @@
  * tHIGH >= 4.0 us); call overhead makes it a bit slower in practice. */
 #define I2C_HALF_US 5u
 
+const char i2c_driver[] = "bit-bang ~100 kHz";
+
 /* RM0008 §9.2.5 GPIOB_BSRR: BSy (bit y) sets ODR -> line released (high via
  * pull-up); BRy (bit y+16) clears ODR -> line driven low. */
 static void scl_high(void) { GPIO_BSRR(GPIOB_BASE) = 1u << SCL_PIN; }

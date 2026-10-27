@@ -86,6 +86,10 @@ int main(void)
     delay_ms(POWER_UP_MS);
     i2c_init();
 
+    uart_puts("i2c: ");
+    uart_puts(i2c_driver);
+    uart_putc('\n');
+
     i2c_bus_ok = i2c_bus_idle();
     log_result("i2c bus idle", i2c_bus_ok);
     if (!i2c_bus_ok) {
@@ -97,8 +101,13 @@ int main(void)
     log_result("oled init", oled_init_ok);
     ssd1306_fill(0x00);
     ssd1306_draw_string(MESSAGE_X, MESSAGE_PAGE, MESSAGE);
+    uint32_t t0 = millis();
     oled_flush_ok = ssd1306_flush();
+    uint32_t flush_ms = millis() - t0;
     log_result("oled flush", oled_flush_ok);
+    uart_puts("flush time: ");
+    uart_put_u32(flush_ms);
+    uart_puts(" ms\n");
 
     uint32_t period = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW_MS : BLINK_FAST_MS;
     for (uint32_t tick = 0;; tick++) {

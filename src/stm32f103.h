@@ -38,6 +38,8 @@
 #define RCC_CFGR_PLLMUL_MASK (0xFu << 18)
 #define RCC_CFGR_PLLMUL_X9  (7u << 18)       /* 0111 = x9 */
 #define RCC_APB2ENR     REG(RCC_BASE + 0x18) /* §7.3.7 APB2 peripheral clock enable */
+#define RCC_APB1ENR     REG(RCC_BASE + 0x1C) /* §7.3.8 APB1 peripheral clock enable */
+#define RCC_APB1ENR_I2C1EN (1u << 21)        /* I2C1 clock enable */
 #define RCC_APB2ENR_IOPAEN (1u << 2)         /* I/O port A clock enable */
 #define RCC_APB2ENR_IOPBEN (1u << 3)         /* I/O port B clock enable */
 #define RCC_APB2ENR_IOPCEN (1u << 4)         /* I/O port C clock enable */
@@ -64,6 +66,30 @@
 #define GPIO_OUT_PP_2MHZ 0x2u /* CNF=00 general-purpose push-pull,  MODE=10 2 MHz */
 #define GPIO_OUT_OD_2MHZ 0x6u /* CNF=01 general-purpose open-drain, MODE=10 2 MHz */
 #define GPIO_AF_PP_2MHZ  0xAu /* CNF=10 alternate-function push-pull, MODE=10 2 MHz */
+#define GPIO_AF_OD_50MHZ 0xFu /* CNF=11 alternate-function open-drain, MODE=11 50 MHz */
+
+/* I2C1 — RM0008 §26.6, base 0x40005400 (APB1) */
+#define I2C1_BASE       0x40005400u
+#define I2C1_CR1        REG(I2C1_BASE + 0x00) /* §26.6.1 control register 1 */
+#define I2C1_CR2        REG(I2C1_BASE + 0x04) /* §26.6.2 control register 2 */
+#define I2C1_DR         REG(I2C1_BASE + 0x10) /* §26.6.5 data register */
+#define I2C1_SR1        REG(I2C1_BASE + 0x14) /* §26.6.6 status register 1 */
+#define I2C1_SR2        REG(I2C1_BASE + 0x18) /* §26.6.7 status register 2 */
+#define I2C1_CCR        REG(I2C1_BASE + 0x1C) /* §26.6.8 clock control */
+#define I2C1_TRISE      REG(I2C1_BASE + 0x20) /* §26.6.9 rise time */
+#define I2C_CR1_PE      (1u << 0)  /* peripheral enable */
+#define I2C_CR1_START   (1u << 8)  /* generate START (cleared by hardware when sent) */
+#define I2C_CR1_STOP    (1u << 9)  /* generate STOP (cleared by hardware when sent) */
+#define I2C_CR1_SWRST   (1u << 15) /* software reset */
+#define I2C_SR1_SB      (1u << 0)  /* START sent (EV5) */
+#define I2C_SR1_ADDR    (1u << 1)  /* address sent and ACKed (EV6) */
+#define I2C_SR1_BTF     (1u << 2)  /* byte transfer finished, incl. ACK bit */
+#define I2C_SR1_TXE     (1u << 7)  /* DR empty */
+#define I2C_SR1_BERR    (1u << 8)  /* bus error (misplaced START/STOP) */
+#define I2C_SR1_ARLO    (1u << 9)  /* arbitration lost */
+#define I2C_SR1_AF      (1u << 10) /* acknowledge failure (NACK) */
+#define I2C_SR2_BUSY    (1u << 1)  /* bus busy (SDA or SCL low seen) */
+#define I2C_CCR_FS      (1u << 15) /* 1 = fast mode (400 kHz) */
 
 /* USART1 — RM0008 §27.6, base 0x40013800 */
 #define USART1_BASE     0x40013800u
