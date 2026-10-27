@@ -4,14 +4,15 @@
  * (UM10204) standard mode; we run well below 100 kHz.
  */
 #include "i2c.h"
-#include "delay.h"
 #include "stm32f103.h"
+#include "systick.h"
 
 #define SCL_PIN 6u
 #define SDA_PIN 7u
 
-/* Quarter-ish bit period: 4 iterations ~= 5 us -> SCL ~= 60-80 kHz. */
-#define I2C_DELAY 4u
+/* Half bit period. 5 us -> SCL <= 100 kHz (standard mode: tLOW >= 4.7 us,
+ * tHIGH >= 4.0 us); call overhead makes it a bit slower in practice. */
+#define I2C_HALF_US 5u
 
 /* RM0008 §9.2.5 GPIOB_BSRR: BSy (bit y) sets ODR -> line released (high via
  * pull-up); BRy (bit y+16) clears ODR -> line driven low. */
@@ -41,19 +42,19 @@ void i2c_init(void)
     crl |= (GPIO_OUT_OD_2MHZ << (SCL_PIN * 4u)) | (GPIO_OUT_OD_2MHZ << (SDA_PIN * 4u));
     GPIO_CRL(GPIOB_BASE) = crl;
 
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
 
     /* Bus recovery: a slave left mid-byte (e.g. by a reset during a transfer)
      * may be waiting for clocks. 9 SCL pulses with SDA released let it finish
      * the byte, then a STOP returns it to idle (UM10204 §3.1.16). */
     for (int i = 0; i < 9; i++) {
         scl_low();
-        delay(I2C_DELAY);
+        delay_us(I2C_HALF_US);
         scl_high();
-        delay(I2C_DELAY);
+        delay_us(I2C_HALF_US);
     }
     scl_low(); /* i2c_stop() expects SCL low, else its sda_low() is a START */
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     i2c_stop();
 }
 
@@ -67,22 +68,22 @@ void i2c_start(void)
 {
     sda_high();
     scl_high();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     sda_low();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     scl_low();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
 }
 
 /* STOP: SDA rises while SCL is high. */
 void i2c_stop(void)
 {
     sda_low();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     scl_high();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     sda_high();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
 }
 
 /* MSB first. SDA may only change while SCL is low. The SSD1306 never
@@ -95,20 +96,20 @@ int i2c_write_byte(uint8_t b)
         } else {
             sda_low();
         }
-        delay(I2C_DELAY);
+        delay_us(I2C_HALF_US);
         scl_high();
-        delay(I2C_DELAY);
+        delay_us(I2C_HALF_US);
         scl_low();
     }
 
     /* 9th clock: release SDA; the slave pulls it low to ACK. */
     sda_high();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     scl_high();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     int ack = !sda_read();
     scl_low();
-    delay(I2C_DELAY);
+    delay_us(I2C_HALF_US);
     return ack;
 }
 

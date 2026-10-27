@@ -1,5 +1,5 @@
 /*
- * USART1 TX on PA9. Clocked from APB2 = HSI 8 MHz (reset default, RM0008 §7.2).
+ * USART1 TX on PA9. Clocked from APB2 = CPU_HZ (APB2 prescaler /1).
  */
 #include "uart.h"
 #include "stm32f103.h"
@@ -9,7 +9,7 @@
 /* RM0008 §27.3.4: baud = fPCLK / (16 * USARTDIV), BRR holds USARTDIV as 12.4
  * fixed point. 8 MHz / 115200 = 69.44 -> BRR = 69 (0x45: mantissa 4, fraction 5)
  * -> actual 115942 baud, +0.64% error (UART tolerates ~±2%). */
-#define PCLK2_HZ 8000000u
+#define PCLK2_HZ CPU_HZ
 #define BAUD     115200u
 #define BRR_VAL  ((PCLK2_HZ + BAUD / 2u) / BAUD)
 

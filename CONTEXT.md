@@ -133,6 +133,8 @@ Power the Blue Pill from the debugger's 3V3 **or** its USB, not both.
 6. (Optional) USART1 debug prints through the debugger's UART bridge. ✅ `src/uart.c`: TX-only, polled, PA9 AF push-pull, BRR=69 (115942 baud from 8 MHz, +0.64%). Wired PA9 → debugger RXD. Boot log (chip info, I2C/OLED results) + `tick N` every ~4 s; captured on `/dev/cu.usbmodem1102`. If the clock changes (e.g. 72 MHz), BRR must be recomputed.
 7. (Optional) Port to Rust.
 
+Extra (done): **SysTick timebase** — `src/systick.c`: 1 ms interrupt (`millis()`, `delay_ms()`), cycle-counted `delay_us()` for I2C. All timing derives from `CPU_HZ` in `src/stm32f103.h` (also feeds UART BRR). Measured: 4000 ms board / ~3998 ms host per blink cycle (HSI ~0.07% fast). To go 72 MHz: set up HSE+PLL, flash latency, APB1 /2, then change `CPU_HZ`.
+
 ## Key references
 - RM0008 — STM32F101/102/103 reference manual (RCC, GPIO, I2C, memory map)
 - STM32F103x8/xB datasheet (pinout, AF mapping)

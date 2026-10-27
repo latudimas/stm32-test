@@ -13,6 +13,7 @@ extern uint32_t _sbss, _ebss;
 int main(void);
 
 void Reset_Handler(void);
+void SysTick_Handler(void); /* systick.c */
 
 /* Any unexpected exception lands here; halt so it's obvious in GDB. */
 void Default_Handler(void)
@@ -36,7 +37,7 @@ static void (*const vector_table[16])(void) = {
     Default_Handler,          /* 12: DebugMonitor            */
     0,                        /* 13: reserved                */
     Default_Handler,          /* 14: PendSV                  */
-    Default_Handler,          /* 15: SysTick                 */
+    SysTick_Handler,          /* 15: SysTick                 */
 };
 
 void Reset_Handler(void)

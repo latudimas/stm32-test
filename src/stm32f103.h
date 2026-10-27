@@ -9,6 +9,18 @@
 
 #define REG(addr) (*(volatile uint32_t *)(addr))
 
+/* Core clock. Reset default: HSI 8 MHz, AHB/APB1/APB2 prescalers all /1
+ * (RM0008 §7.2, §7.3.2 RCC_CFGR reset value). Change here if the clock setup changes. */
+#define CPU_HZ 8000000u
+
+/* SysTick — Cortex-M3 core timer, PM0056 §4.5 (not in RM0008) */
+#define STK_CTRL        REG(0xE000E010u) /* §4.5.1 control and status */
+#define STK_LOAD        REG(0xE000E014u) /* §4.5.2 reload value (24-bit) */
+#define STK_VAL         REG(0xE000E018u) /* §4.5.3 current value */
+#define STK_CTRL_ENABLE    (1u << 0)
+#define STK_CTRL_TICKINT   (1u << 1)     /* exception 15 on reaching 0 */
+#define STK_CTRL_CLKSOURCE (1u << 2)     /* 1 = processor clock (AHB), 0 = AHB/8 */
+
 /* RCC — RM0008 §7.3, base 0x40021000 */
 #define RCC_BASE        0x40021000u
 #define RCC_APB2ENR     REG(RCC_BASE + 0x18) /* §7.3.7 APB2 peripheral clock enable */

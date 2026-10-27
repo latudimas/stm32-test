@@ -10,18 +10,17 @@
  *   LED stays off                 -> bus not idle (a line stuck low / no pull-ups)
  * The same results are in the globals below, readable from GDB/OpenOCD.
  */
-#include "delay.h"
 #include "i2c.h"
 #include "ssd1306.h"
 #include "stm32f103.h"
+#include "systick.h"
 #include "uart.h"
 
 #define LED_PIN 13u
 
-/* ~10 CPU cycles per delay() iteration at 8 MHz (measured) -> 1.6M iterations ~= 2 s. */
-#define BLINK_SLOW 1600000u
-#define BLINK_FAST 80000u
-#define POWER_UP_DELAY 80000u /* ~100 ms for the OLED's supply to settle */
+#define BLINK_SLOW_MS 2000u
+#define BLINK_FAST_MS 100u
+#define POWER_UP_MS   100u /* let the OLED's supply settle */
 
 #define MESSAGE "HELLO WORLD"
 /* 11 chars x 6 px = 66 px wide -> x = (128 - 66) / 2 = 31; page 3 = y 24..31,
@@ -73,11 +72,12 @@ int main(void)
 {
     led_init();
     led_off();
+    systick_init();
     uart_init();
     uart_puts("\n== stm32-test boot ==\n");
     log_chip_info();
 
-    delay(POWER_UP_DELAY);
+    delay_ms(POWER_UP_MS);
     i2c_init();
 
     i2c_bus_ok = i2c_bus_idle();
@@ -94,14 +94,16 @@ int main(void)
     oled_flush_ok = ssd1306_flush();
     log_result("oled flush", oled_flush_ok);
 
-    uint32_t period = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW : BLINK_FAST;
+    uint32_t period = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW_MS : BLINK_FAST_MS;
     for (uint32_t tick = 0;; tick++) {
         uart_puts("tick ");
         uart_put_u32(tick);
-        uart_putc('\n');
+        uart_puts(" at ");
+        uart_put_u32(millis());
+        uart_puts(" ms\n");
         led_on();
-        delay(period);
+        delay_ms(period);
         led_off();
-        delay(period);
+        delay_ms(period);
     }
 }
