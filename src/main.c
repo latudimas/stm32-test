@@ -24,16 +24,24 @@
 #define POWER_UP_MS   100u /* let the OLED's supply settle */
 
 #define MESSAGE "HELLO WORLD"
-/* 11 chars x 6 px = 66 px wide -> x = (128 - 66) / 2 = 31; page 3 = y 24..31,
- * the text row closest to the vertical middle. */
-#define MESSAGE_X ((SSD1306_WIDTH - (sizeof MESSAGE - 1u) * 6u) / 2u)
+/* 11 chars x 6 px = 66 px wide. Page 3 = y 24..31, the text row closest to
+ * the vertical middle. */
+#define MESSAGE_W ((int32_t)(sizeof MESSAGE - 1u) * SSD1306_CHAR_W)
+#define MESSAGE_X ((SSD1306_WIDTH - (uint32_t)MESSAGE_W) / 2u) /* centred: 31 */
 #define MESSAGE_PAGE 3u
 #define TICK_X    MESSAGE_X
 #define TICK_PAGE 6u
 
+/* Running text: move 1 px left every frame. 30 ms/frame (~33 fps) leaves room
+ * for the 23 ms DMA flush; one pass (128 + 66 px) takes ~5.8 s. */
+#define FRAME_MS 30u
+#define TICK_MS  4000u
+
 volatile uint32_t i2c_bus_ok; /* 1 = SCL and SDA high at idle */
 volatile uint32_t oled_init_ok;  /* 1 = every init command byte ACKed */
 volatile uint32_t oled_flush_ok; /* 1 = whole framebuffer ACKed */
+volatile uint32_t frames_drawn;  /* scroll frames handed to the display */
+volatile uint32_t frame_errors;  /* frames whose transfer failed */
 
 static void led_init(void)
 {
@@ -142,29 +150,67 @@ int main(void)
     uart_put_u32(cpu_free_loops);
     uart_putc('\n');
 
-    uint32_t period = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW_MS : BLINK_FAST_MS;
-    for (uint32_t tick = 0;; tick++) {
-        /* The previous screen update was started 4 s ago and never polled;
-         * the DMA interrupt finished it (and sent the STOP) in the background. */
-        int prev = ssd1306_flush_poll();
+    /* Non-blocking main loop: each job runs when its time comes, judged by
+     * millis(), so scrolling, LED and logging all keep going together.
+     * (int32_t)(now - next) >= 0 is "now has reached next", wrap-safe. */
+    uint32_t led_ms = (oled_init_ok && oled_flush_ok) ? BLINK_SLOW_MS : BLINK_FAST_MS;
+    uint32_t now = millis();
+    uint32_t next_frame = now, next_led = now, next_tick = now;
+    int32_t scroll_x = SSD1306_WIDTH; /* start just off the right edge */
+    uint32_t tick = 0;
+    int led = 0;
+    char tick_text[16];
+    format_tick(tick, tick_text);
 
-        uart_puts("tick ");
-        uart_put_u32(tick);
-        uart_puts(" at ");
-        uart_put_u32(millis());
-        uart_puts(prev == I2C_DONE ? " ms, last screen update ok\n"
-                                   : " ms, last screen update FAILED\n");
+    for (;;) {
+        now = millis();
 
-        /* Safe to touch the framebuffer now: no transfer is in progress. */
-        char text[16];
-        format_tick(tick, text);
-        ssd1306_draw_string(TICK_X, TICK_PAGE, "          "); /* clear old number */
-        ssd1306_draw_string(TICK_X, TICK_PAGE, text);
-        ssd1306_flush_start(); /* returns at once; finishes during delay_ms() below */
+        /* Scroll frame. Only touch the framebuffer once the previous DMA
+         * transfer is over (poll != I2C_BUSY); otherwise try again next pass. */
+        int status = ssd1306_flush_poll();
+        if ((int32_t)(now - next_frame) >= 0 && status != I2C_BUSY) {
+            if (status == I2C_ERR) {
+                frame_errors++;
+            }
+            next_frame = now + FRAME_MS;
 
-        led_on();
-        delay_ms(period);
-        led_off();
-        delay_ms(period);
+            ssd1306_clear_page(MESSAGE_PAGE);
+            ssd1306_draw_string(scroll_x, MESSAGE_PAGE, MESSAGE);
+            if (--scroll_x < -MESSAGE_W) {
+                scroll_x = SSD1306_WIDTH; /* fully gone on the left: re-enter right */
+            }
+            ssd1306_clear_page(TICK_PAGE);
+            ssd1306_draw_string(TICK_X, TICK_PAGE, tick_text);
+
+            if (ssd1306_flush_start()) {
+                frames_drawn++;
+            } else {
+                frame_errors++;
+            }
+        }
+
+        if ((int32_t)(now - next_led) >= 0) {
+            next_led += led_ms;
+            led = !led;
+            if (led) {
+                led_on();
+            } else {
+                led_off();
+            }
+        }
+
+        if ((int32_t)(now - next_tick) >= 0) {
+            next_tick += TICK_MS;
+            uart_puts("tick ");
+            uart_put_u32(tick);
+            uart_puts(" at ");
+            uart_put_u32(now);
+            uart_puts(" ms, frames ");
+            uart_put_u32(frames_drawn);
+            uart_puts(", frame errors ");
+            uart_put_u32(frame_errors);
+            uart_putc('\n');
+            format_tick(++tick, tick_text); /* drawn by the next frame */
+        }
     }
 }

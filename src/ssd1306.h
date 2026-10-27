@@ -24,9 +24,13 @@ int ssd1306_flush(void);             /* send the whole framebuffer; 1 on success
 int ssd1306_flush_start(void);       /* 1 if the transfer started */
 int ssd1306_flush_poll(void);
 
+void ssd1306_clear_page(uint32_t page); /* zero one 8-pixel-high row */
+
 /* Text, 5x7 font in a 6-pixel cell. Rows are page-aligned: page 0..7 = y 0, 8, .. 56.
- * Characters outside 0x20..0x7E draw as '?'; anything past column 127 is clipped. */
-void ssd1306_draw_char(uint32_t x, uint32_t page, char c);
-void ssd1306_draw_string(uint32_t x, uint32_t page, const char *s);
+ * x may be negative or past 127 (for scrolling); off-screen columns are clipped.
+ * Characters outside 0x20..0x7E draw as '?'. */
+#define SSD1306_CHAR_W 6
+void ssd1306_draw_char(int32_t x, uint32_t page, char c);
+void ssd1306_draw_string(int32_t x, uint32_t page, const char *s);
 
 #endif

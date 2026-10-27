@@ -98,7 +98,17 @@ int ssd1306_flush(void)
     return r == I2C_DONE;
 }
 
-void ssd1306_draw_char(uint32_t x, uint32_t page, char c)
+void ssd1306_clear_page(uint32_t page)
+{
+    if (page >= SSD1306_HEIGHT / 8u) {
+        return;
+    }
+    for (uint32_t i = 0; i < SSD1306_WIDTH; i++) {
+        ssd1306_fb[page * SSD1306_WIDTH + i] = 0;
+    }
+}
+
+void ssd1306_draw_char(int32_t x, uint32_t page, char c)
 {
     if (page >= SSD1306_HEIGHT / 8u) {
         return;
@@ -112,15 +122,18 @@ void ssd1306_draw_char(uint32_t x, uint32_t page, char c)
     /* A glyph column and a framebuffer byte have the same layout (bit 0 = top),
      * so drawing on a page boundary is a straight copy. */
     uint8_t *row = &ssd1306_fb[page * SSD1306_WIDTH];
-    for (uint32_t col = 0; col < FONT_W && x + col < SSD1306_WIDTH; col++) {
-        row[x + col] = glyph[col];
+    for (int32_t col = 0; col < (int32_t)FONT_W; col++) {
+        int32_t px = x + col;
+        if (px >= 0 && px < (int32_t)SSD1306_WIDTH) { /* clip both edges */
+            row[px] = glyph[col];
+        }
     }
 }
 
-void ssd1306_draw_string(uint32_t x, uint32_t page, const char *s)
+void ssd1306_draw_string(int32_t x, uint32_t page, const char *s)
 {
     /* 5 columns of glyph + 1 blank column between characters. */
-    for (; *s && x < SSD1306_WIDTH; s++, x += FONT_W + 1u) {
+    for (; *s && x < (int32_t)SSD1306_WIDTH; s++, x += (int32_t)(FONT_W + 1u)) {
         ssd1306_draw_char(x, page, *s);
     }
 }

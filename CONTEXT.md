@@ -143,6 +143,8 @@ Extra (done): **DMA for the framebuffer** — DMA1 channel 6 (hard-wired to I2C1
 
 Extra (done): **DMA completion interrupt** — full medium-density vector table in `startup.c` (16 core + 43 IRQs, RM0008 Table 63; `DMA1_Channel6_IRQHandler` weak-aliased to `Default_Handler` for the bit-bang build). NVIC_ISER0 bit 16 enabled in `i2c_init()` (priority 0, same as SysTick). ISR on TC: bounded spin for BTF (millis() doesn't run inside the ISR), then sets STOP without waiting; `i2c_start()` waits for a pending STOP. TE → ERR. `i2c_write_poll()` only reports the result, plus a thread-side timeout abort (with `cpsid i`). main: OLED shows "TICK N" on page 6; each update is started and never polled — finished by the ISR during `delay_ms()`. Verified: `i2c_dma_irqs` = 1 + one per tick (21 after ~80 s), DMA1_CCR6=0x209A (TCIE/TEIE, EN off), NVIC_ISER0=0x00010000.
 
+Extra (done): **Running text** — "HELLO WORLD" scrolls right-to-left on page 3, 1 px per 30 ms frame (~33 fps, one pass ≈ 5.8 s); "TICK N" static on page 6. `ssd1306_draw_char/_string` take signed x and clip both edges; `ssd1306_clear_page()`. main is a non-blocking millis()-scheduled loop (frame / LED / 4 s tick log); a frame is drawn only when the previous DMA flush is done (no tearing). Verified: `frames_drawn` +33/s, `frame_errors` 0, framebuffer snapshots show 10 px movement per 0.3 s. Bit-bang build compiles but would scroll ~4× slower (117 ms/frame); not run on hardware.
+
 Gotcha: only one program can read `/dev/cu.usbmodem1102` at a time — an open `tio` steals bytes from any other reader (looks like dropped/garbled lines).
 
 ## Key references
