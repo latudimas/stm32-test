@@ -92,6 +92,64 @@ The capture tool's optional `--reset` resets the MCU after opening serial, witho
 flashing. USB-UART buffers may contain an earlier boot; summaries keep the latest
 boot/sample session, while the `.log` preserves the full received text.
 
+## Operator-labelled gentle-wobble recording
+
+The operator said "ready to wobble" and was cued to gently rock the entire
+breadboard for a 15-second capture. Saved `build/wobble.csv` and `.log`.
+
+- 895 valid CSV samples, timestamps 133241–148225 ms; valid-row rate 59.66 Hz.
+- Firmware status remained 60.0 FPS, with zero sensor/display errors and no
+  not-ready reads. Maximum observed flush remained 15 ms.
+- Raw XYZ peak-to-peak: **(8943, 17558, 16324)** counts.
+- Consecutive vector-change magnitude (nominal g, only 16/17 ms sample pairs):
+  median **0.0409**, 95th percentile **0.1266**, maximum **0.7555**.
+- For comparison, the quiet final hardware recording had vector-change median
+  **0.0029**, 95th percentile **0.0057**, maximum **0.0082**.
+
+This shows useful separation from quiet, but is not yet a threshold calibration:
+vector differences depend on sample interval and are not the final filtered motion
+metric. The isolated maximum also argues against using a single sample to classify
+shake intensity. Deliberate-shake data is still needed.
+
+Four serial lines contained decoding replacements and were not valid CSV. There
+were five 33 ms gaps among otherwise 16/17 ms intervals; the firmware counters
+showed no I2C acquisition errors. Treat this as an imperfect host-side capture,
+not evidence of sensor read failures. The CSV retains only syntactically valid
+sample lines; the full log preserves the malformed output for inspection.
+
+## Operator-labelled deliberate-shake recording
+
+The operator said "ready to shake" and was cued to shake the entire breadboard
+more strongly than gentle wobble, without loosening components or straining wires.
+A 15-second capture saved `build/shake.csv` and `.log`.
+
+- 890 valid CSV samples, timestamps 225225–240191 ms; valid-row rate 59.40 Hz.
+- Firmware remained at 60.0 FPS with zero sensor/display errors, no not-ready
+  reads, and a 15 ms maximum observed flush.
+- Raw XYZ peak-to-peak: **(38407, 43082, 22116)** counts.
+- Consecutive vector-change magnitude (nominal g, only 16/17 ms sample pairs):
+  median **0.2500**, 95th percentile **0.5352**, maximum **0.8781**.
+- No samples reached the near-saturation criterion of abs(axis) >= 32760 counts.
+- Eight serial lines contained decoding replacements. Valid timestamps include
+  four 33 ms gaps, one 34 ms gap and two 50 ms gaps; other intervals are 16/17 ms.
+  These gaps must not be treated as sensor faults or fed into a fixed-dt metric.
+
+Summary of uncalibrated adjacent-sample change (not the final classifier metric):
+
+| Operator label | Median | 95th percentile | Maximum |
+|---|---:|---:|---:|
+| Quiet candidate | 0.0029 | 0.0057 | 0.0082 |
+| Gentle wobble | 0.0409 | 0.1266 | 0.7555 |
+| Deliberate shake | 0.2500 | 0.5352 | 0.8781 |
+
+The typical deliberate-shake change is about six times the wobble change, with
+clear separation from quiet. However, their single-sample maxima overlap: use
+sustained evidence / a time window, not one peak, to distinguish reactions.
+These recordings support starting an offline/replay-tuned classifier, not claiming
+universal thresholds from one person's movements. Keep the two-second continuous
+quiet return and timestamp-aware filtering. No extra rotation is needed before
+that implementation step; later validate slow-tilt rejection and state transitions.
+
 ## Automated checks and remaining validation
 
 Host tests under address/undefined-behavior sanitizers cover:
