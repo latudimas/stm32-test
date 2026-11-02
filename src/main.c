@@ -8,6 +8,7 @@
 #include "clock.h"
 #include "frame_schedule.h"
 #include "i2c.h"
+#include "mpu9250.h"
 #include "robot_eyes.h"
 #include "ssd1306.h"
 #include "stm32f103.h"
@@ -21,12 +22,16 @@
 #define POWER_UP_MS   100u /* let the OLED's supply settle */
 
 #define TICK_MS  4000u
+#define SENSOR_RETRY_MS 5000u
+#define SENSOR_STALE_MS 500u
 
 /* Read from the debugger to check the frame rate and errors. */
 volatile uint32_t frames_drawn;
 volatile uint32_t frames_completed;
 volatile uint32_t frame_errors;
 volatile uint32_t max_flush_ms;
+volatile uint32_t sensor_samples, sensor_errors, sensor_not_ready;
+volatile uint32_t max_sensor_read_ms;
 
 static void led_init(void)
 {
@@ -51,6 +56,30 @@ static void log_result(const char *what, int ok)
     uart_puts(ok ? ": ok\n" : ": FAIL\n");
 }
 
+static void log_sample(const struct mpu9250_sample *sample)
+{
+    /* CSV acquisition time + raw signed counts. No per-axis calibration yet. */
+    uart_puts("accel,");
+    uart_put_u32(sample->ms);
+    uart_putc(',');
+    uart_put_i32(sample->x);
+    uart_putc(',');
+    uart_put_i32(sample->y);
+    uart_putc(',');
+    uart_put_i32(sample->z);
+    uart_putc('\n');
+}
+
+static void log_sensor(const struct mpu9250 *dev, int ok)
+{
+    log_result("mpu9250 init", ok);
+    uart_puts("mpu address/identity (decimal): ");
+    uart_put_u32(dev->addr);
+    uart_putc('/');
+    uart_put_u32(dev->who);
+    uart_puts("; expected 104 or 105 / 113\n");
+}
+
 int main(void)
 {
     /* Clock first: SysTick, UART and I2C timing are derived from it. */
@@ -72,6 +101,7 @@ int main(void)
     int bus_ok = i2c_bus_idle();
     log_result("i2c bus idle", bus_ok);
     if (!bus_ok) {
+        uart_flush();
         for (;;) {
         }
     }
@@ -86,6 +116,11 @@ int main(void)
         frame_errors++;
     }
 
+    struct mpu9250 sensor;
+    int sensor_ok = mpu9250_init(&sensor);
+    log_sensor(&sensor, sensor_ok);
+    uart_puts("accel CSV: accel,ms,x_raw,y_raw,z_raw (16384 counts/g nominal)\n");
+
     /* Non-blocking loop: each job runs when its time comes, judged by millis().
      * (int32_t)(now - next) >= 0 means "now has reached next", wrap-safe. */
     uint32_t led_ms = oled_ok ? BLINK_OK_MS : BLINK_ERR_MS;
@@ -95,10 +130,14 @@ int main(void)
     uint32_t tick = 0, frame_phase = 0;
     uint32_t flush_started_ms = now, last_log_ms = now;
     uint32_t last_log_frames = 0;
+    uint32_t next_sensor_retry = now + SENSOR_RETRY_MS;
+    uint32_t sensor_fail_streak = 0;
+    uint32_t last_sensor_sample_ms = now;
     int transfer_pending = 0;
     int led = 0;
 
     for (;;) {
+        uart_poll();
         now = millis();
 
         /* Only touch the framebuffer once the previous DMA transfer is over. */
@@ -126,6 +165,47 @@ int main(void)
             frame_schedule_next(&next_frame, &frame_phase, now);
         }
         if (panel_cleared && (int32_t)(now - next_frame) >= 0 && status != I2C_BUSY) {
+            /* The sensor and OLED share I2C1. Only acquire after the previous
+             * flush completed, before starting another. No concurrent START. */
+            if (!sensor_ok && (int32_t)(now - next_sensor_retry) >= 0) {
+                sensor_ok = mpu9250_init(&sensor);
+                log_sensor(&sensor, sensor_ok);
+                sensor_fail_streak = 0;
+                last_sensor_sample_ms = millis();
+                next_sensor_retry = millis() + SENSOR_RETRY_MS;
+            }
+            struct mpu9250_sample sample;
+            int fresh = 0;
+            if (sensor_ok) {
+                uint32_t read_start = millis();
+                fresh = mpu9250_read(&sensor, &sample);
+                uint32_t duration = millis() - read_start;
+                if (duration > max_sensor_read_ms) {
+                    max_sensor_read_ms = duration;
+                }
+                if (fresh < 0) {
+                    sensor_errors++;
+                    if (++sensor_fail_streak >= 3u) {
+                        sensor_ok = 0;
+                        next_sensor_retry = millis() + SENSOR_RETRY_MS;
+                        uart_puts("mpu9250: read failures; default eyes continue\n");
+                    }
+                } else {
+                    sensor_fail_streak = 0;
+                    if (fresh) {
+                        sensor_samples++;
+                        last_sensor_sample_ms = sample.ms;
+                    } else {
+                        sensor_not_ready++;
+                        if (millis() - last_sensor_sample_ms >= SENSOR_STALE_MS) {
+                            sensor_ok = 0;
+                            next_sensor_retry = millis() + SENSOR_RETRY_MS;
+                            uart_puts("mpu9250: stale data; default eyes continue\n");
+                        }
+                    }
+                }
+            }
+            now = millis();
             /* Accumulate elapsed time modulo the loop, including millis()
              * wrap and slow bit-bang frames, without changing animation speed. */
             animation_ms = (animation_ms + (uint32_t)(now - last_animation_ms)) % 8000u;
@@ -143,6 +223,9 @@ int main(void)
             /* Use time after the start call: bit-bang may have blocked for
              * an entire transfer. Skip missed slots rather than catch up. */
             frame_schedule_next(&next_frame, &frame_phase, millis());
+            if (fresh == 1) {
+                log_sample(&sample); /* queue UART text while OLED DMA runs */
+            }
         }
 
         if ((int32_t)(now - next_led) >= 0) {
@@ -172,6 +255,14 @@ int main(void)
             uart_put_u32(max_flush_ms);
             uart_puts(", frame errors ");
             uart_put_u32(frame_errors);
+            uart_puts(", samples ");
+            uart_put_u32(sensor_samples);
+            uart_puts(", sensor errors ");
+            uart_put_u32(sensor_errors);
+            uart_puts(", not ready ");
+            uart_put_u32(sensor_not_ready);
+            uart_puts(", max read ms ");
+            uart_put_u32(max_sensor_read_ms);
             uart_putc('\n');
             tick++;
         }

@@ -1,9 +1,10 @@
 # MPU9250 motion-reactive robot eyes
 
-Status: **design plus initial hardware probe**. Debugger-based I2C communication,
-MPU9250 identity and raw accelerometer reads have been checked; see
-[bring-up results](mpu9250-bringup.md). No production sensor driver, shake detector,
-or reaction animation is implemented yet. The existing eye animation stays intact.
+Status: **acquisition/logging implemented; reactions still design-only**.
+Debugger-based identity/orientation checks are in [bring-up results](mpu9250-bringup.md).
+Firmware acquisition using both I2C drivers is in
+[acquisition validation](mpu9250-acquisition.md). No motion classifier or reaction
+animation is implemented yet. The existing eye animation stays intact.
 A user-supplied photo-review report identifies a GY-9250/6500-style breakout;
 WHO_AM_I now matches MPU9250 (`0x71`), but sensor calibration, genuine silicon
 provenance and electrical details remain unverified. Confusion will
@@ -158,11 +159,11 @@ Keep this split small and testable:
 3. Eye renderer: take expression state and elapsed time; preserve the default loop.
 4. Main loop: serialize I2C access, acquire samples, update state, then render/flush.
 
-**Important existing limitation:** the I2C API currently supports writes only.
-Add and test register-read transactions (including repeated START, ACK/NACK and
-STOP handling) for both hardware and bit-bang drivers. STM32F1 receive sequencing
-has special one-, two-, and multi-byte cases; follow RM0008 and applicable errata.
-Do not just reuse the current transmitter-only address handling for reads.
+**Register reads now implemented:** `i2c_read_regs()` supports a register-pointer
+write, repeated START, ACK/NACK and STOP for both drivers. STM32F1 hardware receive
+uses separate one-, two-, and last-three-byte sequences (RM0008). Sensor identity,
+configuration read-back and sampling exercise lengths 1, 2, 3 and 7 on the board.
+The bit-bang driver now honors clock stretching with bounded waits.
 
 The OLED's 612-byte DMA update occupies about 14 ms of each 16.67 ms frame.
 The CPU is available during DMA, but the **shared I2C bus is not**. Never start a

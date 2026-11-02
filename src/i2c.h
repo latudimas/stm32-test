@@ -18,6 +18,12 @@ void i2c_start(void);
 void i2c_stop(void);
 int i2c_write_byte(uint8_t b); /* returns 1 on ACK, 0 on NACK/error */
 
+/* Bounded register read: write register pointer, repeated START, read bytes.
+ * addr is 7-bit, len is 1..256; returns 1 on success, 0 on invalid/busy/error.
+ * On error buf may be partially written. Thread mode only, interrupts enabled.
+ * Do not call during another bus transaction (including an OLED DMA flush). */
+int i2c_read_regs(uint8_t addr, uint8_t reg, uint8_t *buf, uint32_t len);
+
 /* Bulk send that can run in the background, then STOP. Call after
  * i2c_start() + i2c_write_byte(addr) (+ any prefix bytes). `buf` must stay
  * unchanged until i2c_write_poll() stops returning I2C_BUSY.

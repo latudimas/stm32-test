@@ -21,8 +21,10 @@ tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
 - `src/systick.c`: `millis()`, `delay_ms()`, `delay_us()`
 - `src/i2c_hw.c` / `src/i2c_bitbang.c`: same API from `src/i2c.h`
 - `src/ssd1306.c`, `src/font5x7.c`: display driver, framebuffer, text
-- `src/uart.c`: USART1 TX log on PA9
-- `src/main.c`: scrolling text demo
+- `src/mpu9250.c`: accelerometer identity/configuration and fresh-sample reads
+- `src/uart.c`: queued USART1 TX log on PA9; service `uart_poll()` in main
+- `src/robot_eyes.c`, `src/frame_schedule.h`: eye animation and 60 Hz deadlines
+- `src/main.c`: eye animation + accelerometer acquisition/logging (no reactions yet)
 
 ## Rules
 - No vendor HAL/LL, CMSIS, Arduino or display libraries; no C library (`-nostdlib`).

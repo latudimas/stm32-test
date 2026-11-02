@@ -215,6 +215,115 @@ int i2c_write_byte(uint8_t b)
     return sr1 && !clear_errors(sr1);
 }
 
+/* Save/restore PRIMASK rather than unconditionally enabling interrupts.
+ * PM0056 §2.1.3: used only for the short receive-sequence critical sections. */
+static uint32_t irq_save(void)
+{
+    uint32_t mask;
+    __asm volatile("mrs %0, primask\n cpsid i" : "=r"(mask) :: "memory");
+    return mask;
+}
+static void irq_restore(uint32_t mask)
+{
+    __asm volatile("msr primask, %0" :: "r"(mask) : "memory");
+}
+
+static int received(uint32_t flag)
+{
+    uint32_t sr1 = wait_sr1(flag);
+    return !clear_errors(sr1) && (sr1 & flag);
+}
+
+/* RM0008 §26.3.3 master receiver: ADDR must stay set until ACK/POS is ready.
+ * Special one-/two-byte endings and the last-three-byte sequence use BTF to
+ * hold SCL low while software arranges the final NACK and STOP. */
+int i2c_read_regs(uint8_t addr, uint8_t reg, uint8_t *buf, uint32_t len)
+{
+    if (addr > 0x7Fu || !buf || len == 0 || len > 256u ||
+        i2c_write_poll() == I2C_BUSY) {
+        return 0;
+    }
+    i2c_start();
+    if (!expect_addr || !i2c_write_byte((uint8_t)(addr << 1)) ||
+        !i2c_write_byte(reg)) {
+        goto fail;
+    }
+    /* RM0008 §26.6.1 I2C_CR1: ACK enabled, POS=0 before repeated START. */
+    I2C1_CR1 = (I2C1_CR1 | I2C_CR1_ACK) & ~I2C_CR1_POS;
+    i2c_start();
+    if (!expect_addr) {
+        goto fail;
+    }
+    expect_addr = 0;
+    /* RM0008 §26.6.5 I2C_DR: send address with read bit, leave ADDR uncleared. */
+    I2C1_DR = (uint8_t)((addr << 1) | 1u);
+    if (!received(I2C_SR1_ADDR)) {
+        goto fail;
+    }
+
+    if (len == 1) {
+        uint32_t mask = irq_save();
+        /* RM0008 §26.6.1 CR1: NACK the only byte before clearing ADDR. */
+        I2C1_CR1 &= ~I2C_CR1_ACK;
+        (void)I2C1_SR2; /* §26.6.7: clear ADDR after SR1 read above. */
+        I2C1_CR1 |= I2C_CR1_STOP; /* §26.6.1: STOP after that byte. */
+        irq_restore(mask);
+        if (!received(I2C_SR1_RXNE)) {
+            goto fail;
+        }
+        buf[0] = (uint8_t)I2C1_DR;
+    } else if (len == 2) {
+        uint32_t mask = irq_save();
+        /* RM0008 §26.6.1 CR1: POS makes the next ACK bit the last-byte NACK. */
+        I2C1_CR1 |= I2C_CR1_POS;
+        (void)I2C1_SR2; /* §26.6.7: release ADDR/SCL. */
+        I2C1_CR1 &= ~I2C_CR1_ACK; /* §26.6.1: NACK second byte. */
+        irq_restore(mask);
+        if (!received(I2C_SR1_BTF)) {
+            goto fail;
+        }
+        mask = irq_save();
+        I2C1_CR1 |= I2C_CR1_STOP; /* §26.6.1: end two buffered bytes. */
+        *buf++ = (uint8_t)I2C1_DR;
+        *buf = (uint8_t)I2C1_DR;
+        irq_restore(mask);
+    } else {
+        (void)I2C1_SR2; /* RM0008 §26.6.7: clear ADDR, ACK remains enabled. */
+        while (len > 3u) {
+            if (!received(I2C_SR1_RXNE)) {
+                goto fail;
+            }
+            *buf++ = (uint8_t)I2C1_DR;
+            len--;
+        }
+        if (!received(I2C_SR1_BTF)) {
+            goto fail;
+        }
+        uint32_t mask = irq_save();
+        I2C1_CR1 &= ~I2C_CR1_ACK; /* RM0008 §26.6.1: NACK final byte. */
+        *buf++ = (uint8_t)I2C1_DR; /* release third-last byte; last byte clocks in. */
+        irq_restore(mask);
+        if (!received(I2C_SR1_BTF)) {
+            goto fail;
+        }
+        mask = irq_save();
+        I2C1_CR1 |= I2C_CR1_STOP; /* RM0008 §26.6.1: final two bytes buffered. */
+        *buf++ = (uint8_t)I2C1_DR;
+        *buf = (uint8_t)I2C1_DR;
+        irq_restore(mask);
+    }
+    /* RM0008 §26.6.1 CR1: restore normal transmitter defaults. The next
+     * i2c_start() waits for STOP to finish before touching the bus. */
+    I2C1_CR1 &= ~(I2C_CR1_ACK | I2C_CR1_POS);
+    return 1;
+
+fail:
+    i2c_stop();
+    /* RM0008 §26.6.1 CR1: remove receive-only settings after an abort. */
+    I2C1_CR1 &= ~(I2C_CR1_ACK | I2C_CR1_POS);
+    return 0;
+}
+
 /* Master transmitter with DMA, RM0008 §26.3.7 "DMA requests":
  * DMA fills DR on every TXE; when the DMA count reaches 0 (TC) the last byte
  * is only in DR/the shift register, so wait for BTF before STOP (EV8_2). */

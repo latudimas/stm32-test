@@ -12,20 +12,23 @@ library, no C library: every register is set by hand from the reference manual.
 - DMA + interrupt screen updates (full 1 KB frame in ~23 ms, CPU free meanwhile)
 - Robot eyes: smooth left/right glances, blinks and a playful double blink
 - SSD1306 driver with a 5x7 ASCII font and clipped text drawing
-- USART1 status log over the debugger's USB-UART bridge
+- MPU9250 accelerometer acquisition between OLED transfers (no reactions yet)
+- Buffered USART1 status/sample log over the debugger's USB-UART bridge
 
 ## Hardware
 | Part | Notes |
 |---|---|
 | STM32F103 Blue Pill | 64 KB flash, 20 KB RAM, 8 MHz crystal |
 | SSD1306 128x64 OLED | 4-pin I2C, address `0x3C` |
+| GY-9250/6500-style sensor breakout | WHO_AM_I `0x71` matches MPU9250; acceleration uncalibrated |
 | ST-Link V2.1 probe | e.g. WeAct Mini Debugger (SWD + USB-UART) |
 
 ### Wiring
 ![Logical wiring: OLED and proposed MPU9250 share PB6/PB7; ST-Link connects SWD and PA9 UART](docs/wiring.svg)
 
-The MPU9250 connections are **proposed**, not implemented in firmware yet.
-Confirm the breakout's supply pin, logic levels and straps before wiring it;
+The MPU9250 is wired and accelerometer acquisition is implemented. Firmware
+reads verified successfully with both I2C drivers. For another module, still
+confirm its supply pin, logic levels, pull-ups and straps before wiring it;
 see [motion-reactive eyes design](docs/mpu9250-motion.md). Initial debugger probing
 found the sensor at `0x68` with WHO_AM_I `0x71`; raw readings and remaining
 calibration checks are recorded in [bring-up results](docs/mpu9250-bringup.md).
@@ -64,7 +67,8 @@ clear. A private 1 KB staging buffer packs page slices for one DMA transfer.
 The bit-banged driver skips missed frames but keeps the same animation timing.
 Drawing waits for DMA completion. UART logs completed FPS (multiplied by 10),
 maximum observed flush duration in ms, frame starts and errors every 4 s.
-60 FPS is a target until verified on hardware; the I2C clock stays at 400 kHz.
+Hardware testing reports 60.0 FPS with sensor reads active and zero sensor/display
+errors. The I2C clock stays at 400 kHz; bit-bang is slower.
 
 The pose timeline and eye dimensions live in `src/robot_eyes.c`.
 
@@ -73,6 +77,30 @@ The pose timeline and eye dimensions live in `src/robot_eyes.c`.
 - fast blink: display error
 - off: I2C bus stuck
 
+## Sensor logging bring-up
+Firmware checks WHO_AM_I (`0x71`), wakes the accelerometer, sets +/-2 g and a
+41 Hz low-pass filter at a 100 Hz internal sample rate. It reads the latest
+sample once per rendered frame: about 60 samples/s with hardware I2C, not a
+lossless 100 Hz stream. Gyro, magnetometer and FIFO are not used.
+
+UART emits `accel,ms,x_raw,y_raw,z_raw`; nominal sensitivity is 16384 counts/g,
+but this sensor is not calibrated. Four-second status lines report FPS, sample
+counts, errors and not-ready reads. Default eyes keep running if the sensor is
+missing or fails; acquisition retries after 5 seconds. A responding sensor that
+provides no fresh data for 500 ms is also treated as unavailable.
+
+Capture data without extra Python packages (close `tio` first):
+
+```sh
+python3 tools/capture_accel.py --seconds 15 --output build/stationary.csv
+# Add --reset to reset the MCU after opening serial and capture boot diagnostics.
+# Add --port /dev/ttyACM0 on Linux (or the appropriate port on your machine).
+```
+
+The tool saves raw CSV and a sibling `.log` file, then prints sample timing and
+summary statistics. Values/logs under `build/` are local measurements, not tracked.
+See [acquisition validation](docs/mpu9250-acquisition.md) for tested behavior.
+
 ## Planned motion interaction
 An MPU9250 accelerometer on the same prototype breadboard will select between:
 - Stationary: current default animation.
@@ -80,8 +108,8 @@ An MPU9250 accelerometer on the same prototype breadboard will select between:
 - Deliberate shake: spinning dizzy spirals replacing both eyes entirely.
 
 Both reactions return to default after **2 continuous seconds of quiet**.
-Numeric trigger thresholds and animation details remain to be agreed/tuned;
-no motion firmware is included yet.
+Numeric trigger thresholds and animation details remain to be agreed/tuned.
+Only acquisition/logging is implemented; no classifier or reaction animations yet.
 
 See [`docs/mpu9250-motion.md`](docs/mpu9250-motion.md) for state transitions,
 proposed wiring, shared-I2C timing constraints and implementation milestones.

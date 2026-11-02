@@ -87,10 +87,13 @@
 #define I2C_CR1_PE      (1u << 0)  /* peripheral enable */
 #define I2C_CR1_START   (1u << 8)  /* generate START (cleared by hardware when sent) */
 #define I2C_CR1_STOP    (1u << 9)  /* generate STOP (cleared by hardware when sent) */
+#define I2C_CR1_ACK     (1u << 10) /* acknowledge received bytes */
+#define I2C_CR1_POS     (1u << 11) /* ACK position for two-byte reception */
 #define I2C_CR1_SWRST   (1u << 15) /* software reset */
 #define I2C_SR1_SB      (1u << 0)  /* START sent (EV5) */
 #define I2C_SR1_ADDR    (1u << 1)  /* address sent and ACKed (EV6) */
 #define I2C_SR1_BTF     (1u << 2)  /* byte transfer finished, incl. ACK bit */
+#define I2C_SR1_RXNE    (1u << 6)  /* received byte in DR */
 #define I2C_SR1_TXE     (1u << 7)  /* DR empty */
 #define I2C_SR1_BERR    (1u << 8)  /* bus error (misplaced START/STOP) */
 #define I2C_SR1_ARLO    (1u << 9)  /* arbitration lost */

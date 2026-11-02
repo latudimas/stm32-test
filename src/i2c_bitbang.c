@@ -18,7 +18,6 @@ const char i2c_driver[] = "bit-bang ~100 kHz";
 
 /* RM0008 §9.2.5 GPIOB_BSRR: BSy (bit y) sets ODR -> line released (high via
  * pull-up); BRy (bit y+16) clears ODR -> line driven low. */
-static void scl_high(void) { GPIO_BSRR(GPIOB_BASE) = 1u << SCL_PIN; }
 static void scl_low(void)  { GPIO_BSRR(GPIOB_BASE) = 1u << (SCL_PIN + 16u); }
 static void sda_high(void) { GPIO_BSRR(GPIOB_BASE) = 1u << SDA_PIN; }
 static void sda_low(void)  { GPIO_BSRR(GPIOB_BASE) = 1u << (SDA_PIN + 16u); }
@@ -28,8 +27,24 @@ static void sda_low(void)  { GPIO_BSRR(GPIOB_BASE) = 1u << (SDA_PIN + 16u); }
 static int sda_read(void) { return (GPIO_IDR(GPIOB_BASE) >> SDA_PIN) & 1u; }
 static int scl_read(void) { return (GPIO_IDR(GPIOB_BASE) >> SCL_PIN) & 1u; }
 
+static int bus_error;
+
+static void scl_high(void)
+{
+    /* RM0008 §9.2.5 GPIOB_BSRR: release SCL; honor clock stretching. */
+    GPIO_BSRR(GPIOB_BASE) = 1u << SCL_PIN;
+    uint32_t start = millis();
+    while (!scl_read()) {
+        if (millis() - start > 2u) {
+            bus_error = 1;
+            break;
+        }
+    }
+}
+
 void i2c_init(void)
 {
+    bus_error = 0;
     /* RM0008 §7.3.7 RCC_APB2ENR: IOPBEN=1 — clock GPIOB. */
     RCC_APB2ENR |= RCC_APB2ENR_IOPBEN;
 
@@ -68,8 +83,12 @@ int i2c_bus_idle(void)
 /* START: SDA falls while SCL is high. */
 void i2c_start(void)
 {
+    bus_error = 0;
     sda_high();
     scl_high();
+    if (!sda_read()) {
+        bus_error = 1;
+    }
     delay_us(I2C_HALF_US);
     sda_low();
     delay_us(I2C_HALF_US);
@@ -88,10 +107,13 @@ void i2c_stop(void)
     delay_us(I2C_HALF_US);
 }
 
-/* MSB first. SDA may only change while SCL is low. The SSD1306 never
- * stretches the clock, so we don't wait for SCL to actually go high. */
+/* MSB first. SDA may only change while SCL is low. Clock stretching is
+ * bounded by scl_high(), so a failed sensor cannot hang the display loop. */
 int i2c_write_byte(uint8_t b)
 {
+    if (bus_error) {
+        return 0;
+    }
     for (int i = 7; i >= 0; i--) {
         if (b & (1u << i)) {
             sda_high();
@@ -100,6 +122,10 @@ int i2c_write_byte(uint8_t b)
         }
         delay_us(I2C_HALF_US);
         scl_high();
+        if (bus_error) {
+            scl_low();
+            return 0;
+        }
         delay_us(I2C_HALF_US);
         scl_low();
     }
@@ -112,7 +138,53 @@ int i2c_write_byte(uint8_t b)
     int ack = !sda_read();
     scl_low();
     delay_us(I2C_HALF_US);
-    return ack;
+    return ack && !bus_error;
+}
+
+static uint8_t read_byte(int ack)
+{
+    uint8_t b = 0;
+    sda_high();
+    for (uint32_t i = 0; i < 8u; i++) {
+        delay_us(I2C_HALF_US);
+        scl_high();
+        delay_us(I2C_HALF_US);
+        b = (uint8_t)((b << 1) | sda_read());
+        scl_low();
+        if (bus_error) {
+            return 0;
+        }
+    }
+    if (ack) {
+        sda_low();
+    }
+    delay_us(I2C_HALF_US);
+    scl_high();
+    delay_us(I2C_HALF_US);
+    scl_low();
+    sda_high();
+    delay_us(I2C_HALF_US);
+    return b;
+}
+
+int i2c_read_regs(uint8_t addr, uint8_t reg, uint8_t *buf, uint32_t len)
+{
+    if (addr > 0x7Fu || !buf || len == 0 || len > 256u ||
+        i2c_write_poll() == I2C_BUSY) {
+        return 0;
+    }
+    i2c_start();
+    int ok = i2c_write_byte((uint8_t)(addr << 1)) && i2c_write_byte(reg);
+    if (ok) {
+        i2c_start(); /* repeated START; preserve register pointer */
+        ok = i2c_write_byte((uint8_t)((addr << 1) | 1u));
+    }
+    for (uint32_t i = 0; ok && i < len; i++) {
+        buf[i] = read_byte(i + 1u < len); /* NACK only the final byte */
+        ok = !bus_error;
+    }
+    i2c_stop();
+    return ok && !bus_error;
 }
 
 /* No DMA here: do the whole transfer now and hand the result to poll. */
