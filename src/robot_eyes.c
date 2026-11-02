@@ -11,26 +11,26 @@ struct pose {
 };
 
 static const struct pose poses[] = {
-    {   0,   0, 36},
-    {1100,   0, 36},
+    {   0,   0, 42},
+    {1100,   0, 42},
     {1190,   0,  2},
     {1250,   0,  2},
-    {1400,   0, 36},
-    {1900,   0, 36},
-    {2200, -14, 32},
-    {3300, -14, 32},
-    {3800,  14, 32},
-    {4900,  14, 32},
-    {5200,   0, 36},
-    {5800,   0, 36},
+    {1400,   0, 42},
+    {1900,   0, 42},
+    {2200, -14, 38},
+    {3300, -14, 38},
+    {3800,  14, 38},
+    {4900,  14, 38},
+    {5200,   0, 42},
+    {5800,   0, 42},
     {5890,   0,  2},
     {5950,   0,  2},
-    {6100,   0, 36},
-    {6280,   0, 36},
+    {6100,   0, 42},
+    {6280,   0, 42},
     {6370,   0,  2},
     {6430,   0,  2},
-    {6580,   0, 36},
-    {8000,   0, 36},
+    {6580,   0, 42},
+    {8000,   0, 42},
 };
 
 /* Integer smoothstep (0..256): ease into and out of each pose, no floats. */
@@ -52,10 +52,12 @@ static void pixel(int32_t x, int32_t y)
 
 static void eye(int32_t cx, int32_t height)
 {
-    const int32_t width = 30;
+    const int32_t width = 26;
+    /* Half-width rounding makes open eyes capsule-shaped; limit by height
+     * so the same shape still squashes cleanly into a closed eyelid. */
     int32_t radius = height / 2;
-    if (radius > 8) {
-        radius = 8;
+    if (radius > width / 2) {
+        radius = width / 2;
     }
     int32_t left = cx - width / 2;
     int32_t top = ((int32_t)SSD1306_HEIGHT - height) / 2;

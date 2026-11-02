@@ -27,22 +27,40 @@ static void bounds(uint32_t ms, int expected_x, int expected_height)
             }
         }
     }
-    assert(min_x == 25 + expected_x);
-    assert(max_x == 102 + expected_x);
+    assert(min_x == 27 + expected_x);
+    assert(max_x == 100 + expected_x);
     assert(max_y - min_y + 1 == expected_height);
     assert(min_y + max_y == 63);
 }
 
 int main(void)
 {
-    bounds(0, 0, 36);
+    bounds(0, 0, 42);
+    /* Open-eye caps are narrow at the tips and full-width in the middle,
+     * with matching top/bottom curves and left/right eyes. */
+    for (int y = 11; y < 53; y++) {
+        for (int x = 27; x < 53; x++) {
+            int lit = (ssd1306_fb[y / 8 * 128 + x] >> (y % 8)) & 1;
+            int mirror_y = 63 - y;
+            assert(lit == ((ssd1306_fb[mirror_y / 8 * 128 + x] >>
+                            (mirror_y % 8)) & 1));
+            assert(lit == ((ssd1306_fb[y / 8 * 128 + x + 48] >>
+                            (y % 8)) & 1));
+        }
+    }
+    int tip_pixels = 0;
+    for (int x = 27; x < 53; x++) {
+        tip_pixels += (ssd1306_fb[128 + x] >> 3) & 1; /* y = 11 */
+        assert(ssd1306_fb[4 * 128 + x] & 1u); /* y = 32 */
+    }
+    assert(tip_pixels > 0 && tip_pixels <= 12);
     bounds(1190, 0, 2);
-    bounds(2200, -14, 32);
-    bounds(3800, 14, 32);
+    bounds(2200, -14, 38);
+    bounds(3800, 14, 38);
     bounds(5890, 0, 2);
-    bounds(6100, 0, 36);
+    bounds(6100, 0, 42);
     bounds(6370, 0, 2);
-    bounds(8000, 0, 36);
+    bounds(8000, 0, 42);
 
     uint8_t first[SSD1306_FB_SIZE];
     for (uint32_t ms = 0; ms < 8000; ms++) {
