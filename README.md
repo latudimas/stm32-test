@@ -26,7 +26,9 @@ library, no C library: every register is set by hand from the reference manual.
 
 The MPU9250 connections are **proposed**, not implemented in firmware yet.
 Confirm the breakout's supply pin, logic levels and straps before wiring it;
-see [motion-reactive eyes design](docs/mpu9250-motion.md).
+see [motion-reactive eyes design](docs/mpu9250-motion.md). Initial debugger probing
+found the sensor at `0x68` with WHO_AM_I `0x71`; raw readings and remaining
+calibration checks are recorded in [bring-up results](docs/mpu9250-bringup.md).
 
 | From | To (Blue Pill) |
 |---|---|

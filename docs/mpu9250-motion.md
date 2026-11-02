@@ -1,9 +1,12 @@
 # MPU9250 motion-reactive robot eyes
 
-Status: **proposal / wiring preparation only**. No sensor driver, shake detector,
-or confused animation is implemented yet. The existing eye animation stays intact.
+Status: **design plus initial hardware probe**. Debugger-based I2C communication,
+MPU9250 identity and raw accelerometer reads have been checked; see
+[bring-up results](mpu9250-bringup.md). No production sensor driver, shake detector,
+or reaction animation is implemented yet. The existing eye animation stays intact.
 A user-supplied photo-review report identifies a GY-9250/6500-style breakout;
-the exact sensor silicon and electrical details remain open. Confusion will
+WHO_AM_I now matches MPU9250 (`0x71`), but sensor calibration, genuine silicon
+provenance and electrical details remain unverified. Confusion will
 replace both normal eyes entirely with spinning dizzy spirals (user-approved).
 
 ## Behavior
@@ -202,8 +205,9 @@ vendor HAL/libraries. Sensor transactions must not overwrite in-flight OLED buff
 
 ## Questions to resolve
 
-- Resolve the report's remaining unknowns: exact sensor model, pull-up voltage/resistance,
-  and existing NCS/AD0 straps. GY-9250/6500-style appearance is only provisional.
+- Resolve remaining electrical unknowns: pull-up voltage/resistance and existing
+  NCS/AD0 straps. WHO_AM_I matches MPU9250, but the low measured gravity magnitude
+  needs multi-orientation verification before calibration or threshold tuning.
 - Exact squint height/behavior and transition durations? Confusion's full-eye
   spiral replacement is agreed; spiral size, line thickness and speed need visual tuning.
 - Approve latching confusion until quiet rather than downgrading to squinting?
