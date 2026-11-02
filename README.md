@@ -22,13 +22,19 @@ library, no C library: every register is set by hand from the reference manual.
 | ST-Link V2.1 probe | e.g. WeAct Mini Debugger (SWD + USB-UART) |
 
 ### Wiring
-![Wiring diagram: OLED SCL/SDA to PB6/PB7, ST-Link SWD to the Blue Pill SWD header, ST-Link RXD to PA9](docs/wiring.svg)
+![Logical wiring: OLED and proposed MPU9250 share PB6/PB7; ST-Link connects SWD and PA9 UART](docs/wiring.svg)
+
+The MPU9250 connections are **proposed**, not implemented in firmware yet.
+Confirm the breakout's supply pin, logic levels and straps before wiring it;
+see [motion-reactive eyes design](docs/mpu9250-motion.md).
 
 | From | To (Blue Pill) |
 |---|---|
 | OLED SCL | PB6 |
 | OLED SDA | PB7 |
 | OLED VCC / GND | 3.3 / GND |
+| MPU9250 SCL / SDA (proposed) | PB6 / PB7, shared with OLED |
+| MPU9250 supply / GND (proposed) | 3.3 / GND, only after breakout verification |
 | Probe 3V3 / SWDIO / SWCLK / GND | 3.3 / DIO / CLK / GND |
 | Probe RXD | PA9 (USART1 TX) |
 
@@ -64,6 +70,19 @@ The pose timeline and eye dimensions live in `src/robot_eyes.c`.
 - 2 s blink: running, display OK
 - fast blink: display error
 - off: I2C bus stuck
+
+## Planned motion interaction
+An MPU9250 accelerometer on the same prototype breadboard will select between:
+- Stationary: current default animation.
+- Gentle wobble: squinting eyes.
+- Deliberate shake: spinning dizzy spirals replacing both eyes entirely.
+
+Both reactions return to default after **2 continuous seconds of quiet**.
+Numeric trigger thresholds and animation details remain to be agreed/tuned;
+no motion firmware is included yet.
+
+See [`docs/mpu9250-motion.md`](docs/mpu9250-motion.md) for state transitions,
+proposed wiring, shared-I2C timing constraints and implementation milestones.
 
 ## More
 - `CONTEXT.md`: design notes, register readouts and milestone history
