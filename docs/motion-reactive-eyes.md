@@ -1,7 +1,10 @@
 # Motion-reactive robot eyes implementation
 
-Branch: `feat/motion-reactive-eyes`. The acquisition checkpoint is `cbf4e9b`;
-recording findings were committed as `5cb2660` before this implementation.
+Current revision: `feat/oscillatory-wobble-detection`, based on `main` at
+`d01dc97`. The original implementation was developed on `feat/motion-reactive-eyes`;
+its acquisition checkpoint is `cbf4e9b`, and labelled recording findings are in
+`5cb2660`. Earlier board-test results below describe that original detector unless
+explicitly marked as the oscillation revision.
 
 ## Current behavior
 
@@ -10,7 +13,8 @@ recording findings were committed as `5cb2660` before this implementation.
 | Quiet / stationary | Default | Existing blink, left/right glance, double-blink loop |
 | Confirmed gentle wobble | Squinting | Both eyes narrow to 12 px high, with small glances and blinks |
 | Confirmed deliberate shake | Confused | Two spinning spirals completely replace the rounded eyes |
-| 2 continuous seconds of classified quiet | Default | Return to centered open eyes, restart the default timeline |
+| 1.2 continuous seconds of classified quiet after squinting | Default | Return to centered open eyes, restart the default timeline |
+| 2 continuous seconds of classified quiet after confusion | Default | Return to centered open eyes, restart the default timeline |
 | Sensor unavailable/stale | Default | Fault fallback, not a claim of physical quiet |
 
 Shake can escalate from either default or squinting. Confusion remains latched
@@ -26,19 +30,45 @@ calibration is required. Raw inputs are converted to nominal mg (16384 counts/g)
 An 80 ms per-axis low-pass estimates the gravity/bias baseline; squared residual
 magnitude is the motion energy. No square root or floating-point library is used.
 
-Initial thresholds, tuned against the preserved operator recordings:
+### Wobble: repeated signed excursions, not amplitude alone
 
-| Level | Residual magnitude (nominal) | Evidence |
-|---|---:|---|
-| Quiet | <=25 mg | 2000 ms continuously quiet |
-| Wobble | >=70 mg | 100 ms accumulated active evidence |
-| Shake | >=420 mg | 160 ms accumulated active evidence |
+The original 70 mg / 100 ms magnitude-evidence rule also reacted to ordinary
+lifting and small handling movements, as reported by the user after the first
+release. This revision replaces **only squint entry** with a temporal pattern:
 
-Wobble/shake evidence is a leaky accumulator: add active elapsed milliseconds,
-subtract inactive milliseconds, clamp to the confirmation limit. Entry also needs
-at least three consecutive changing samples. A normalized L1 input-change gate
-(12 mg per 17 ms) rejects the filter tail of an isolated impact; a single large
-peak is not enough to select confusion. Shake has priority over wobble.
+- Track signed residual acceleration independently on X, Y and Z.
+- An excursion must remain >=+70 mg or <=-70 mg continuously for at least 50 ms.
+  The neutral band resets an unconfirmed excursion; a sign cannot count twice
+  without a qualified opposite excursion.
+- Require at least five alternating qualified excursions on **one axis**
+  (`+ - + - +` or the inverse), roughly two cycles.
+- Qualified reversals must be 100–600 ms apart. Faster alternation restarts the
+  candidate; long pauses expire it.
+- Require at least 600 ms of total evidence span, within a 2200 ms window.
+- Missing samples, >100 ms acquisition gaps and reinitialization clear histories.
+
+Lifting typically produces a short acceleration/deceleration event rather than
+this repeated pattern. X/Y/Z histories cannot be combined into a fictitious
+cycle. This remains a provisional gesture definition: normal handling that
+actually repeats the same oscillation can still resemble intentional wobble.
+There is no Kalman filter, gyro acquisition, new library or extra I2C transaction.
+Confirmation deliberately adds latency compared with the original 100 ms rule.
+
+### Shake: original rule retained
+
+Shake still uses >=420 mg vector residual magnitude and 160 ms of leaky active
+evidence: add active elapsed milliseconds, subtract inactive milliseconds,
+clamp at the confirmation limit. Entry still needs three consecutive changing
+samples. The unchanged normalized L1 input-change gate (12 mg per 17 ms) rejects
+the filter tail of an isolated impact. Shake has priority and can interrupt
+squinting or an unconfirmed wobble immediately once its own rule is satisfied.
+
+### Quiet return
+
+Residual vector magnitude <=25 mg starts continuous quiet proof. Squinting now
+returns after **1200 ms**; confusion still requires **2000 ms**. These are quiet
+holds, not fixed expression lengths: movement above the quiet level restarts
+the timer even if it does not trigger a new expression.
 
 Timing/health details:
 - Duplicate timestamps cannot add evidence.
@@ -48,7 +78,7 @@ Timing/health details:
 - At 500 ms stale, polling falls back to default without asserting physical quiet.
 - Driver failure also explicitly resets the detector; reinitialization is still
   retried after 5 seconds by the acquisition code.
-- The two-second return begins when **filtered motion** falls below the quiet
+- The 1.2/2-second return begins when **filtered motion** falls below the quiet
   level, not necessarily on the exact instant a hand stops moving. Filter settling
   and the 180 ms visual transition can add a short visible delay.
 - uint32_t timestamp wrap is supported. At bit-bang's ~12 Hz, timing remains
@@ -70,7 +100,7 @@ number of completed transfers.
 State changes use a 180 ms ordered monochrome cross-dissolve from a framebuffer
 snapshot. Escalation can interrupt an in-progress dissolve smoothly. Returning
 to default resets its pose timeline to centered/open. The extra snapshot uses
-1 KB RAM; current hardware firmware links at about 7 KB text and 3.7 KB static RAM,
+1 KB RAM; current hardware firmware links at about 7.3 KB text and 3.7 KB static RAM,
 well within 64 KB flash / 20 KB RAM (with additional stack headroom required).
 
 All poses, spiral rotations and transition frames remain inside x=13–114,
@@ -90,14 +120,26 @@ Replay results from committed CSV fixtures in `tests/data/`:
 | Recording | Default samples | Squinting samples | Confused samples |
 |---|---:|---:|---:|
 | Quiet | 587 | 0 | 0 |
-| Gentle wobble | 112 | 783 | 0 |
-| Deliberate shake | 8 | 52 | 830 |
+| Gentle wobble | 288 | 607 | 0 |
+| Deliberate shake | 60 | 0 | 830 |
 
 These recordings were used for tuning, so this is regression coverage, **not an
 independent live validation set**. Synthetic tests cover escalation, no downgrade,
-exact 1999/2000 ms quiet boundaries, renewed motion, missing samples, long gaps,
-duplicates, stale fallback, timestamp wrap, isolated full-range spikes at 60/12 Hz,
-slow baseline changes and signed input extremes.
+exact 1199/1200 and 1999/2000 ms quiet boundaries, renewed motion, missing samples,
+long gaps, duplicates, stale fallback, timestamp wrap, isolated full-range spikes
+at 60/12 Hz, slow baseline changes and signed input extremes.
+
+`tests/motion_gesture_test.c` adds synthetic lift/coast/deceleration profiles,
+repositioning, short movement pulses, fast ringing, disconnected multi-axis events,
+too-short sequences, slow/expired sequences, and legitimate repeated oscillation
+at 60/12 Hz on every axis, including timestamp wrap. Synthetic handling stays
+default; real handling still needs independent operator recordings.
+
+An offline comparison against `main`'s original classifier also checked the three
+recordings with appended quiet recovery and 20,000 seeded mixed-rate synthetic
+samples. The confused/not-confused result matched at every sample. Shake fixture
+entry remains exactly **226225 ms**, now pinned by a regression test. A synthetic
+lift that triggered squinting with the old rule stays default with the new rule.
 
 Renderer tests cover all states across eight seconds at 8 ms steps, including
 transitions; verify the partial-update bounds, spiral periodicity/opposite rotation,
@@ -107,7 +149,27 @@ Existing sensor, UART, scheduling and region-DMA tests remain enabled.
 Both hardware and bit-bang builds compile warning-free with no C library. Header
 dependency files are generated so header changes correctly rebuild consumers.
 
-### First reactive firmware hardware check
+### Oscillation revision stationary hardware check
+
+The revised hardware-I2C firmware was flashed and read for 10 seconds while
+requesting no movement. It stayed default throughout:
+- 587 valid samples, 60.00 samples/s, 16/17 ms intervals.
+- 60.0 FPS; zero reported sensor/display errors and no not-ready reads.
+- Maximum observed flush 15 ms; sensor read 1 ms on the coarse clock.
+- Local capture: `build/oscillation-stationary.csv` / `.log`.
+- Previous flash backed up as `build/pre-oscillation-d01dc97-flash.bin`.
+
+The board is now running this revision with hardware I2C. Both builds compile
+without warnings and all eight host suites pass with ASan/UBSan.
+
+**Operator feedback after trying this revision:** behavior is much better; small
+movements no longer cause squinting, and small movement, gentle wobble and
+deliberate shake are distinguishable. This is qualitative live confirmation of
+the revised interaction, not a timestamped validation dataset. A coordinated
+continuous recording remains useful for measuring sensitivity, false-trigger
+rates and recovery timing.
+
+### Original reactive firmware hardware check
 
 Hardware I2C reactive firmware was flashed and read for 12 seconds while the
 operator was asked to leave the breadboard still:
@@ -118,9 +180,10 @@ operator was asked to leave the breadboard still:
 - Saved locally at `build/motion-stationary.csv` / `.log`.
 
 The acquisition-only flash image was backed up to `build/pre-motion-flash.bin`
-before flashing. Hardware is left running the reactive hardware-I2C build.
+before flashing. At that checkpoint hardware was left running the original
+reactive hardware-I2C build.
 
-### First live reaction test
+### First live reaction test (original detector)
 
 Four serial captures were made while cueing wobble/rest/shake/rest. All status
 lines reported **60.0 FPS**, zero sensor/display errors, no not-ready reads and
@@ -165,8 +228,10 @@ motion,<ms>,<default|squinting|confused>,<energy_mg2>
 Four-second status lines include current state and energy. Close other serial
 readers before using `tools/capture_accel.py`.
 
-For the next coordinated live test, gently wobble and observe squinting, set down
-and observe the quiet return, then deliberately shake and observe spirals. Keep
+For the next coordinated continuous test, first lift/carry/reposition the board
+without repeated wobbling and check that it stays default. Then gently wobble
+back and forth and observe squinting and its shorter quiet return, followed by
+a deliberate shake and the unchanged spiral/two-second quiet behavior. Keep
 all components secured; a violent shake is neither necessary nor safe. Capture
 these as independent live validation before adjusting sensitivity or calling the
 visual design final. Slow rotation can be tested afterward for false triggers.

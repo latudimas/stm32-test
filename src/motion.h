@@ -5,15 +5,25 @@
 
 enum motion_state { MOTION_DEFAULT, MOTION_SQUINTING, MOTION_CONFUSED };
 
-#define MOTION_QUIET_MS 2000u
+#define MOTION_SQUINT_QUIET_MS 1200u
+#define MOTION_CONFUSED_QUIET_MS 2000u
 #define MOTION_STALE_MS 500u
+
+/* Signed excursions must alternate on the same axis. Separate histories avoid
+ * stitching unrelated X/Y/Z movements together into a fictitious wobble. */
+struct motion_wobble_axis {
+    uint32_t first_ms, last_ms, candidate_since;
+    int8_t sign, candidate_sign;
+    uint8_t lobes;
+};
 
 struct motion {
     enum motion_state state;
     int32_t gravity_q8[3];
     int32_t previous_mg[3];
     uint32_t last_ms, quiet_since;
-    uint32_t wobble_ms, shake_ms;
+    struct motion_wobble_axis wobble[3];
+    uint32_t shake_ms;
     uint32_t energy_mg2; /* high-pass acceleration squared, nominal mg^2 */
     uint8_t initialized, quiet, changing_samples;
 };

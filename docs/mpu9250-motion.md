@@ -1,9 +1,10 @@
 # MPU9250 motion-reactive robot eyes
 
-Status: **initial classifier and reaction animations implemented**. Current
-behavior, thresholds and validation limits are in
-[motion-reactive eyes implementation](motion-reactive-eyes.md). Live visual and
-sensitivity checks are pending; this document retains the design/wiring rationale.
+Status: **classifier and reaction animations implemented; oscillatory-wobble
+revision under test**. Current behavior, thresholds and validation limits are in
+[motion-reactive eyes implementation](motion-reactive-eyes.md). Original visual
+reactions are confirmed; revised live sensitivity checks are pending. This
+document retains the design/wiring rationale.
 Debugger-based identity/orientation checks are in [bring-up results](mpu9250-bringup.md).
 Firmware acquisition using both I2C drivers is in
 [acquisition validation](mpu9250-acquisition.md). The original eye loop is preserved
@@ -18,30 +19,32 @@ replace both normal eyes entirely with spinning dizzy spirals (user-approved).
 | State | Display | Transition |
 |---|---|---|
 | Default | Current blink / left-right / double-blink loop | Confirmed gentle wobble → squinting; confirmed deliberate shake → confused |
-| Squinting | Both eyes 12 px high, small glances and blinks | Confirmed deliberate shake → confused; 2 continuous seconds of quiet → default |
+| Squinting | Both eyes 12 px high, small glances and blinks | Confirmed deliberate shake → confused; 1.2 continuous seconds of quiet → default |
 | Confused | Spinning dizzy spirals replacing both eyes entirely | 2 continuous seconds of quiet → default |
 
-**User decisions:** distinguish gentle wobble from deliberate shake; return to
-normal after **2 seconds (2000 ms) of continuous quiet**. The sensor will be
+**User decisions:** distinguish incidental movement from repeated gentle wobble,
+then distinguish wobble from deliberate shake. Quiet return is now **1.2 seconds
+(1200 ms) for squinting**, while confusion retains **2 seconds (2000 ms)**. The sensor will be
 mounted on the same breadboard as the display/Blue Pill during prototyping.
 Secure the module so loose mounting or wires do not introduce independent motion.
 
-Initial implemented transition policy (live interaction validation pending):
+Implemented transition policy (revised sensitivity validation pending):
 - Priority is confused > squinting > default. A confirmed shake can escalate
   directly from default or interrupt squinting without waiting for its animation.
 - Confused stays latched during weaker movement; do not downgrade to squinting
   until returning through default. This avoids jitter between expressions.
 - Any valid sample above the quiet threshold resets the quiet timer, including
   movement too weak to trigger a new reaction. Start timing again only below it.
-- Return on the first valid quiet sample at/after 2000 ms of uninterrupted quiet;
-  use elapsed timestamps, not a fixed number of samples or animation frames.
+- Return on the first valid quiet sample at/after 1200 ms (squinting) or 2000 ms
+  (confusion) of uninterrupted quiet; use elapsed timestamps, not a fixed number
+  of samples or animation frames.
 
-Use ordered thresholds: quiet < wobble < shake, with hysteresis and time-window
-confirmation. Do not switch from a single noisy sample. Numeric acceleration
-thresholds and the evidence window must be tuned from real sensor logs; a
-200–300 ms confirmation window is a starting experiment, not a fixed requirement.
-The two-second quiet hold already prevents a fleeting reaction; no separate
-one-second minimum hold is required.
+Do not switch from a single noisy sample. Squint entry now requires repeated
+signed acceleration excursions on one axis, not merely elevated magnitude.
+Shake retains its original higher-magnitude evidence rule and priority. Numeric
+thresholds and gesture timing need validation with real lift/carry/wobble logs.
+The state-specific quiet holds prevent fleeting reactions; no separate minimum
+expression duration is required.
 
 Recovery rules:
 - After exit, restart the default timeline at its centered open-eye pose.
@@ -56,10 +59,11 @@ this first interaction. A stationary sensor measures gravity, not zero accelerat
 Estimate the slow gravity component per axis with a low-pass filter, then measure
 the remaining fast acceleration (sum of squares avoids a square root). Count
 repeated high-motion samples in a short window rather than treating a single
-impact as a sustained shake. Use the same filtered motion metric with separate
-wobble and shake evidence levels. Test the higher-priority shake level first, so
-a strong movement is not incorrectly classified only as wobble. Calibrate noise
-and choose thresholds from stationary, gentle-wobble and deliberate-shake logs.
+impact as a sustained shake. For wobble, keep signed per-axis residuals and count
+persistent alternating excursions on the same axis; magnitude alone cannot
+distinguish a lift from back-and-forth motion. Test the higher-priority shake
+level first, so a strong movement is not classified only as wobble. Choose
+thresholds from stationary, incidental-handling, wobble and deliberate-shake logs.
 
 A slow change in orientation should normally not trigger confusion. An
 acceleration-only detector can still react to fast rotation or shocks; test and
@@ -196,13 +200,14 @@ vendor HAL/libraries. Sensor transactions must not overwrite in-flight OLED buff
 
 1. **Confirm hardware and UX**: resolve remaining supply/pull-up/strap checks and
    expression details. Two trigger levels, a shared prototype breadboard, and a
-   two-second quiet return are agreed; sensitivity needs measured calibration.
+   1.2 s squint / 2 s confused quiet returns are agreed; sensitivity needs real
+   incidental-handling validation.
 2. **Bring-up only**: verify sensor address and WHO_AM_I, configure accelerometer,
    log stationary/tilted/shaken readings while the existing animation keeps running.
 3. **Detector**: host tests using stationary noise, orientation changes, gentle
    wobble, deliberate shake, isolated impacts, escalation and no downgrade during
-   weaker movement. Check quiet recovery at 1999/2000 ms, timer reset on renewed
-   motion, missing samples/faults and time wraparound.
+   weaker movement. Check quiet recovery at 1199/1200 and 1999/2000 ms, timer
+   reset on renewed motion, missing samples/faults and time wraparound.
 4. **Reaction renderers**: approve distinct squinting and confused sequences; test
    all poses against the partial-update window, then connect them to the detector.
 5. **Board validation**: check state transitions, false triggers, FPS, I2C errors,
@@ -216,6 +221,7 @@ vendor HAL/libraries. Sensor transactions must not overwrite in-flight OLED buff
 - Live visual tuning: initial 12 px squint, 180 ms transitions, two-pixel spiral
   strokes and one revolution/second. Confirm appearance and sensitivity on the OLED.
 - Confirm the implemented confusion latch feels right during weaker movement.
-- Should an isolated impact trigger a reaction, or only repeated wobbling/shaking?
+- Verify normal lifting/carrying and isolated impacts stay default, while
+  repeated gentle wobbling still triggers squinting reliably.
 - Choose numeric sensitivities from logs on the shared breadboard; mounting is
   agreed, but the module should be secured before calibration.

@@ -13,6 +13,7 @@ run() {
     printf 'PASS %s\n' "$name"
 }
 run motion tests/motion_test.c src/motion.c
+run motion-gesture tests/motion_gesture_test.c src/motion.c
 run robot-eyes tests/robot_eyes_test.c src/robot_eyes.c
 run robot-reactions tests/robot_reactions_test.c src/robot_eyes.c
 run mpu9250 tests/mpu9250_test.c src/mpu9250.c

@@ -25,7 +25,7 @@ tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
 - `src/mpu9250.c`: accelerometer identity/configuration and fresh-sample reads
 - `src/uart.c`: queued USART1 TX log on PA9; service `uart_poll()` in main
 - `src/robot_eyes.c`, `src/frame_schedule.h`: eye animation and 60 Hz deadlines
-- `src/motion.c`: sample-driven wobble/shake classifier and two-second quiet return
+- `src/motion.c`: oscillatory wobble/shake classifier; 1.2 s squint / 2 s dizzy quiet return
 - `src/main.c`: motion-reactive eyes + accelerometer acquisition/logging
 
 ## Rules

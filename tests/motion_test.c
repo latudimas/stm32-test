@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include "motion.h"
 
-static void replay(const char *path, enum motion_state expected)
+static void replay(const char *path, enum motion_state expected, unsigned expected_shake_ms)
 {
     FILE *f = fopen(path, "r");
     assert(f);
@@ -11,17 +11,21 @@ static void replay(const char *path, enum motion_state expected)
     assert(fgets(header, sizeof header, f));
     struct motion m;
     motion_init(&m);
-    unsigned ms, count[3] = {0}, seen = 0;
+    unsigned ms, count[3] = {0}, seen = 0, first_shake_ms = 0;
     int x, y, z;
     while (fscanf(f, "%u,%d,%d,%d", &ms, &x, &y, &z) == 4) {
         motion_update(&m, ms, (int16_t)x, (int16_t)y, (int16_t)z);
         assert(m.state <= expected); /* quiet never reacts; wobble never confuses */
         count[m.state]++;
+        if (m.state == MOTION_CONFUSED && !(seen & (1u << MOTION_CONFUSED))) {
+            first_shake_ms = ms;
+        }
         seen |= 1u << m.state;
     }
     assert(feof(f));
     fclose(f);
     assert(seen & (1u << expected));
+    assert(first_shake_ms == expected_shake_ms); /* preserve original shake onset */
     printf("%s: default=%u squinting=%u confused=%u\n", path, count[0], count[1], count[2]);
 }
 
@@ -33,23 +37,37 @@ static void alternating(struct motion *m, uint32_t *ms, int amplitude, uint32_t 
     }
 }
 
+static void wobbling(struct motion *m, uint32_t *ms)
+{
+    /* Smooth-ish triangular back-and-forth acceleration, period 800 ms. */
+    for (unsigned t = 20; t <= 3200; t += 20) {
+        unsigned phase = t % 800;
+        int value = phase < 200 ? (int)phase * 6000 / 200 :
+                    phase < 600 ? 6000 - (int)(phase - 200) * 6000 / 200 :
+                    -6000 + (int)(phase - 600) * 6000 / 200;
+        *ms += 20;
+        motion_update(m, *ms, (int16_t)value, 0, 14000);
+    }
+}
+
 int main(void)
 {
-    replay("tests/data/quiet.csv", MOTION_DEFAULT);
-    replay("tests/data/wobble.csv", MOTION_SQUINTING);
-    replay("tests/data/shake.csv", MOTION_CONFUSED);
+    replay("tests/data/quiet.csv", MOTION_DEFAULT, 0);
+    replay("tests/data/wobble.csv", MOTION_SQUINTING, 0);
+    replay("tests/data/shake.csv", MOTION_CONFUSED, 226225);
     struct motion m;
     motion_init(&m);
     uint32_t ms = 0;
     motion_update(&m, ms, 0, 0, 14000);
-    alternating(&m, &ms, 6000, 20);
+    wobbling(&m, &ms);
     assert(m.state == MOTION_SQUINTING);
     alternating(&m, &ms, 15000, 20);
     assert(m.state == MOTION_CONFUSED);
-    alternating(&m, &ms, 6000, 20);
+    wobbling(&m, &ms);
     assert(m.state == MOTION_CONFUSED); /* never downgrade during weaker motion */
     motion_missing(&m);
-    assert(!m.quiet && m.wobble_ms == 0 && m.shake_ms == 0);
+    assert(!m.quiet && m.shake_ms == 0);
+    for (unsigned i = 0; i < 3; i++) assert(m.wobble[i].lobes == 0);
     motion_poll(&m, ms + 499);
     assert(m.state == MOTION_CONFUSED);
     motion_poll(&m, ms + 500);
@@ -80,9 +98,9 @@ int main(void)
     assert(!m.quiet); /* renewed motion breaks the quiet timer */
 
     /* A duplicate timestamp cannot add evidence. */
-    unsigned evidence = m.wobble_ms;
+    unsigned evidence = m.shake_ms;
     motion_update(&m, 2420, -12000, 0, 14000);
-    assert(m.wobble_ms == evidence);
+    assert(m.shake_ms == evidence);
 
     /* One isolated full-range spike must not select a reaction at 60/12 Hz. */
     for (unsigned dt = 17; dt <= 83; dt += 66) {

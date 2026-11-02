@@ -105,17 +105,23 @@ See [acquisition validation](docs/mpu9250-acquisition.md) for tested behavior.
 ## Motion interaction
 The MPU9250 accelerometer on the same prototype breadboard selects between:
 - Stationary: current default animation.
-- Gentle wobble: squinting eyes.
+- Repeated gentle back-and-forth wobble: squinting eyes (not just a brief movement).
 - Deliberate shake: spinning dizzy spirals replacing both eyes entirely.
 
-Both reactions return to default after **2 continuous seconds of quiet**.
+Squinting returns after **1.2 continuous seconds of quiet**; dizzy spirals keep
+**2 continuous seconds of quiet**. These are quiet holds, not fixed durations.
 Shake overrides squinting, and confusion remains active through weaker motion
 until the quiet return. Missing/stale sensor data falls back to default.
 State changes use a short monochrome dissolve; spirals rotate in opposite directions.
 
-Initial sensitivity is tuned against the recorded prototype motions, not absolute
-calibration. Replay tests pass and stationary firmware runs at 60 FPS; live visual
-reaction/sensitivity checks are still needed. See
+Wobble entry now requires multiple alternating acceleration excursions on one
+axis, intended to reject lifting/repositioning. Shake entry is unchanged.
+Sensitivity is provisional, not absolute calibration. Replay/synthetic handling
+tests pass, and operator feedback confirms improved live separation of small
+movements, gentle wobble and deliberate shake. Quantitative live validation
+recordings remain pending.
+The original visual reactions were confirmed on the OLED at 60 FPS; the revised
+detector also maintains 60 FPS in its stationary board check. See
 [`docs/motion-reactive-eyes.md`](docs/motion-reactive-eyes.md) for the implementation,
 thresholds, logs and validation limits.
 
