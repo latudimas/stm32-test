@@ -9,6 +9,7 @@
 #include "frame_schedule.h"
 #include "i2c.h"
 #include "mpu9250.h"
+#include "motion.h"
 #include "robot_eyes.h"
 #include "ssd1306.h"
 #include "stm32f103.h"
@@ -23,7 +24,7 @@
 
 #define TICK_MS  4000u
 #define SENSOR_RETRY_MS 5000u
-#define SENSOR_STALE_MS 500u
+#define SENSOR_STALE_MS MOTION_STALE_MS
 
 /* Read from the debugger to check the frame rate and errors. */
 volatile uint32_t frames_drawn;
@@ -126,7 +127,10 @@ int main(void)
     uint32_t led_ms = oled_ok ? BLINK_OK_MS : BLINK_ERR_MS;
     uint32_t now = millis();
     uint32_t next_frame = now, next_led = now, next_tick = now;
-    uint32_t last_animation_ms = now, animation_ms = 0;
+    struct motion motion;
+    motion_init(&motion);
+    static struct robot_eyes eyes;
+    robot_eyes_init(&eyes, now);
     uint32_t tick = 0, frame_phase = 0;
     uint32_t flush_started_ms = now, last_log_ms = now;
     uint32_t last_log_frames = 0;
@@ -165,6 +169,7 @@ int main(void)
             frame_schedule_next(&next_frame, &frame_phase, now);
         }
         if (panel_cleared && (int32_t)(now - next_frame) >= 0 && status != I2C_BUSY) {
+            enum motion_state previous_state = motion.state;
             /* The sensor and OLED share I2C1. Only acquire after the previous
              * flush completed, before starting another. No concurrent START. */
             if (!sensor_ok && (int32_t)(now - next_sensor_retry) >= 0) {
@@ -206,11 +211,15 @@ int main(void)
                 }
             }
             now = millis();
-            /* Accumulate elapsed time modulo the loop, including millis()
-             * wrap and slow bit-bang frames, without changing animation speed. */
-            animation_ms = (animation_ms + (uint32_t)(now - last_animation_ms)) % 8000u;
-            last_animation_ms = now;
-            robot_eyes_draw(animation_ms);
+            if (!sensor_ok) {
+                motion_init(&motion); /* fault fallback, not physical quiet */
+            } else if (fresh == 1) {
+                motion_update(&motion, sample.ms, sample.x, sample.y, sample.z);
+            } else {
+                motion_missing(&motion); /* missing data cannot prove quiet */
+            }
+            motion_poll(&motion, now);
+            robot_eyes_animate(&eyes, motion.state, now);
 
             flush_started_ms = millis();
             if (ssd1306_flush_region_start(ROBOT_EYES_X, ROBOT_EYES_PAGE,
@@ -225,6 +234,15 @@ int main(void)
             frame_schedule_next(&next_frame, &frame_phase, millis());
             if (fresh == 1) {
                 log_sample(&sample); /* queue UART text while OLED DMA runs */
+            }
+            if (motion.state != previous_state) {
+                uart_puts("motion,");
+                uart_put_u32(now);
+                uart_putc(',');
+                uart_puts(motion_name(motion.state));
+                uart_putc(',');
+                uart_put_u32(motion.energy_mg2);
+                uart_putc('\n');
             }
         }
 
@@ -263,6 +281,10 @@ int main(void)
             uart_put_u32(sensor_not_ready);
             uart_puts(", max read ms ");
             uart_put_u32(max_sensor_read_ms);
+            uart_puts(", motion ");
+            uart_puts(motion_name(motion.state));
+            uart_puts(", energy mg2 ");
+            uart_put_u32(motion.energy_mg2);
             uart_putc('\n');
             tick++;
         }

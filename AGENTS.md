@@ -9,6 +9,7 @@ Tools come from the Nix flake (`direnv allow`, or `nix develop`).
 ```sh
 make                  # build/firmware.elf (hardware I2C1 + DMA)
 make I2C=bitbang      # bit-banged I2C instead
+make test             # host regressions with ASan/UBSan (no board access)
 make flash            # program via ST-Link + OpenOCD, verify, reset
 make openocd          # GDB server on :3333; then `make gdb`
 tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
@@ -24,7 +25,8 @@ tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
 - `src/mpu9250.c`: accelerometer identity/configuration and fresh-sample reads
 - `src/uart.c`: queued USART1 TX log on PA9; service `uart_poll()` in main
 - `src/robot_eyes.c`, `src/frame_schedule.h`: eye animation and 60 Hz deadlines
-- `src/main.c`: eye animation + accelerometer acquisition/logging (no reactions yet)
+- `src/motion.c`: sample-driven wobble/shake classifier and two-second quiet return
+- `src/main.c`: motion-reactive eyes + accelerometer acquisition/logging
 
 ## Rules
 - No vendor HAL/LL, CMSIS, Arduino or display libraries; no C library (`-nostdlib`).

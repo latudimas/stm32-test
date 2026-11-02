@@ -1,5 +1,9 @@
 # MPU9250 firmware acquisition validation
 
+This document records the acquisition checkpoint and labelled tuning captures.
+The subsequent classifier/renderers are described in
+[motion-reactive eyes implementation](motion-reactive-eyes.md).
+
 Branch: `feat/mpu9250-logging`, based on the committed hardware-probe checkpoint
 `1e328af`. This step adds **acquisition and logging only**. No motion thresholds,
 classifier, squinting renderer or spiral renderer is connected yet.

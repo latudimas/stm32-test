@@ -1,10 +1,13 @@
 # MPU9250 motion-reactive robot eyes
 
-Status: **acquisition/logging implemented; reactions still design-only**.
+Status: **initial classifier and reaction animations implemented**. Current
+behavior, thresholds and validation limits are in
+[motion-reactive eyes implementation](motion-reactive-eyes.md). Live visual and
+sensitivity checks are pending; this document retains the design/wiring rationale.
 Debugger-based identity/orientation checks are in [bring-up results](mpu9250-bringup.md).
 Firmware acquisition using both I2C drivers is in
-[acquisition validation](mpu9250-acquisition.md). No motion classifier or reaction
-animation is implemented yet. The existing eye animation stays intact.
+[acquisition validation](mpu9250-acquisition.md). The original eye loop is preserved
+as the default state.
 A user-supplied photo-review report identifies a GY-9250/6500-style breakout;
 WHO_AM_I now matches MPU9250 (`0x71`), but sensor calibration, genuine silicon
 provenance and electrical details remain unverified. Confusion will
@@ -15,7 +18,7 @@ replace both normal eyes entirely with spinning dizzy spirals (user-approved).
 | State | Display | Transition |
 |---|---|---|
 | Default | Current blink / left-right / double-blink loop | Confirmed gentle wobble → squinting; confirmed deliberate shake → confused |
-| Squinting | Both eyes partially closed; visual details TBD | Confirmed deliberate shake → confused; 2 continuous seconds of quiet → default |
+| Squinting | Both eyes 12 px high, small glances and blinks | Confirmed deliberate shake → confused; 2 continuous seconds of quiet → default |
 | Confused | Spinning dizzy spirals replacing both eyes entirely | 2 continuous seconds of quiet → default |
 
 **User decisions:** distinguish gentle wobble from deliberate shake; return to
@@ -23,7 +26,7 @@ normal after **2 seconds (2000 ms) of continuous quiet**. The sensor will be
 mounted on the same breadboard as the display/Blue Pill during prototyping.
 Secure the module so loose mounting or wires do not introduce independent motion.
 
-Recommended transition policy (pending visual/interaction approval):
+Initial implemented transition policy (live interaction validation pending):
 - Priority is confused > squinting > default. A confirmed shake can escalate
   directly from default or interrupt squinting without waiting for its animation.
 - Confused stays latched during weaker movement; do not downgrade to squinting
@@ -63,11 +66,12 @@ acceleration-only detector can still react to fast rotation or shocks; test and
 tune that behavior before adding a gyro-based refinement. Do not make a long,
 stationary startup calibration mandatory: the user may power it on while moving.
 
-### Squinting expression: details open
+### Squinting expression
 
-Gentle wobble should smoothly reduce both eyes' height into a squint, preserving
-the narrow rounded shape. Exact height, glance behavior and transition duration
-remain to be agreed; do not reuse the confusion expression for this state.
+Gentle wobble reduces both eyes to a 12 px squint, preserving the narrow rounded
+shape. Glances use one third of default travel; blinks still close to 2 px.
+A 180 ms ordered dissolve transitions between states. These initial dimensions
+and transition timing can be adjusted after looking at the OLED.
 
 ### Confused expression: spinning dizzy spirals
 
@@ -209,9 +213,9 @@ vendor HAL/libraries. Sensor transactions must not overwrite in-flight OLED buff
 - Resolve remaining electrical unknowns: pull-up voltage/resistance and existing
   NCS/AD0 straps. WHO_AM_I matches MPU9250, but the low measured gravity magnitude
   needs multi-orientation verification before calibration or threshold tuning.
-- Exact squint height/behavior and transition durations? Confusion's full-eye
-  spiral replacement is agreed; spiral size, line thickness and speed need visual tuning.
-- Approve latching confusion until quiet rather than downgrading to squinting?
+- Live visual tuning: initial 12 px squint, 180 ms transitions, two-pixel spiral
+  strokes and one revolution/second. Confirm appearance and sensitivity on the OLED.
+- Confirm the implemented confusion latch feels right during weaker movement.
 - Should an isolated impact trigger a reaction, or only repeated wobbling/shaking?
 - Choose numeric sensitivities from logs on the shared breadboard; mounting is
   agreed, but the module should be secured before calibration.

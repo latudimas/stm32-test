@@ -1,4 +1,4 @@
-/* Minimal MPU9250 accelerometer acquisition; no motion classifier yet. */
+/* MPU9250 accelerometer acquisition; classification lives in motion.h. */
 #ifndef MPU9250_H
 #define MPU9250_H
 #include <stdint.h>

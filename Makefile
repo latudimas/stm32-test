@@ -10,7 +10,7 @@ TARGET = $(BUILD)/firmware
 # I2C driver: hw (I2C1 peripheral, 400 kHz) or bitbang (GPIO). e.g. `make I2C=bitbang flash`
 I2C ?= hw
 SRCS = src/startup.c src/main.c src/i2c_$(I2C).c src/ssd1306.c src/font5x7.c \
-       src/uart.c src/systick.c src/clock.c src/robot_eyes.c src/mpu9250.c
+       src/uart.c src/systick.c src/clock.c src/robot_eyes.c src/mpu9250.c src/motion.c
 OBJS = $(SRCS:src/%.c=$(BUILD)/%.o)
 LDSCRIPT = stm32f103.ld
 
@@ -18,15 +18,17 @@ LDSCRIPT = stm32f103.ld
 # Reset_Handler into memcpy/memset calls, which don't exist with -nostdlib.
 CFLAGS = -mcpu=cortex-m3 -mthumb -std=c11 -Os -g -Wall -Wextra \
          -ffreestanding -fno-tree-loop-distribute-patterns \
-         -ffunction-sections -fdata-sections
+         -ffunction-sections -fdata-sections -MMD -MP
 LDFLAGS = -nostdlib -T $(LDSCRIPT) -Wl,--gc-sections \
           -Wl,-Map=$(TARGET).map -Wl,--no-warn-rwx-segments
 
 OPENOCD = openocd -f interface/stlink.cfg -f target/stm32f1x.cfg
 
-.PHONY: all flash openocd gdb clean FORCE
+.PHONY: all flash openocd gdb test clean FORCE
 
 all: $(TARGET).elf $(TARGET).bin
+
+-include $(OBJS:.o=.d)
 
 $(BUILD)/%.o: src/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -55,6 +57,10 @@ openocd:
 
 gdb: $(TARGET).elf
 	$(GDB) $< -ex "target extended-remote :3333" -ex "monitor reset halt"
+
+# Host-only tests (HOST_CC defaults to cc), with ASan/UBSan. No flashing.
+test:
+	sh tests/run.sh
 
 clean:
 	rm -rf $(BUILD)

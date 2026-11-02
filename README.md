@@ -10,9 +10,9 @@ library, no C library: every register is set by hand from the reference manual.
 - SysTick timebase: `millis()`, `delay_ms()`, `delay_us()`
 - I2C two ways: hardware I2C1 at 400 kHz, or bit-banged GPIO
 - DMA + interrupt screen updates (full 1 KB frame in ~23 ms, CPU free meanwhile)
-- Robot eyes: smooth left/right glances, blinks and a playful double blink
+- Robot eyes: smooth default glances/blinks, wobble squinting, shake-triggered dizzy spirals
 - SSD1306 driver with a 5x7 ASCII font and clipped text drawing
-- MPU9250 accelerometer acquisition between OLED transfers (no reactions yet)
+- MPU9250 acquisition and relative-motion classification between OLED transfers
 - Buffered USART1 status/sample log over the debugger's USB-UART bridge
 
 ## Hardware
@@ -44,6 +44,7 @@ calibration checks are recorded in [bring-up results](docs/mpu9250-bringup.md).
 | Probe RXD | PA9 (USART1 TX) |
 
 Both BOOT jumpers at 0. Power the board from the probe or USB, not both.
+Secure the sensor to the same breadboard so it moves with the display.
 
 ## Build and flash
 Requires [Nix](https://nixos.org) with flakes; the dev shell provides the ARM
@@ -101,18 +102,27 @@ The tool saves raw CSV and a sibling `.log` file, then prints sample timing and
 summary statistics. Values/logs under `build/` are local measurements, not tracked.
 See [acquisition validation](docs/mpu9250-acquisition.md) for tested behavior.
 
-## Planned motion interaction
-An MPU9250 accelerometer on the same prototype breadboard will select between:
+## Motion interaction
+The MPU9250 accelerometer on the same prototype breadboard selects between:
 - Stationary: current default animation.
 - Gentle wobble: squinting eyes.
 - Deliberate shake: spinning dizzy spirals replacing both eyes entirely.
 
 Both reactions return to default after **2 continuous seconds of quiet**.
-Numeric trigger thresholds and animation details remain to be agreed/tuned.
-Only acquisition/logging is implemented; no classifier or reaction animations yet.
+Shake overrides squinting, and confusion remains active through weaker motion
+until the quiet return. Missing/stale sensor data falls back to default.
+State changes use a short monochrome dissolve; spirals rotate in opposite directions.
+
+Initial sensitivity is tuned against the recorded prototype motions, not absolute
+calibration. Replay tests pass and stationary firmware runs at 60 FPS; live visual
+reaction/sensitivity checks are still needed. See
+[`docs/motion-reactive-eyes.md`](docs/motion-reactive-eyes.md) for the implementation,
+thresholds, logs and validation limits.
+
+Run the host regression suite with `make test` (no flashing).
 
 See [`docs/mpu9250-motion.md`](docs/mpu9250-motion.md) for state transitions,
-proposed wiring, shared-I2C timing constraints and implementation milestones.
+wiring precautions, shared-I2C timing constraints and original design decisions.
 
 ## More
 - `CONTEXT.md`: design notes, register readouts and milestone history
