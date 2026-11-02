@@ -49,10 +49,14 @@ tio -b 115200 /dev/cu.usbmodem1102   # watch the log (port name varies)
 
 ## Animation
 Two bright rounded eyes follow an eight-second loop: blink, look left, look
-right, return to center, then double blink. Frames are drawn about every 30 ms
-with hardware I2C; the bit-banged driver draws fewer frames but keeps the same
-animation timing. Drawing waits for DMA completion so the framebuffer is never
-changed during a transfer. UART still logs frame counts and errors every 4 s.
+right, return to center, then double blink. Hardware I2C targets 60 FPS using
+16/17/17 ms frame intervals. Each update sends only the eye window (102 columns
+by 6 pages = 612 bytes, about 14 ms at 400 kHz), after a full-screen startup
+clear. A private 1 KB staging buffer packs page slices for one DMA transfer.
+The bit-banged driver skips missed frames but keeps the same animation timing.
+Drawing waits for DMA completion. UART logs completed FPS (multiplied by 10),
+maximum observed flush duration in ms, frame starts and errors every 4 s.
+60 FPS is a target until verified on hardware; the I2C clock stays at 400 kHz.
 
 The pose timeline and eye dimensions live in `src/robot_eyes.c`.
 

@@ -66,6 +66,15 @@ int main(void)
     for (uint32_t ms = 0; ms < 8000; ms++) {
         robot_eyes_draw(ms);
         memcpy(first, ssd1306_fb, sizeof first);
+        /* Every lit byte must fit the partial-update window, for all poses. */
+        for (uint32_t p = 0; p < SSD1306_HEIGHT / 8u; p++) {
+            for (uint32_t x = 0; x < SSD1306_WIDTH; x++) {
+                if (p < ROBOT_EYES_PAGE || p >= ROBOT_EYES_PAGE + ROBOT_EYES_PAGES ||
+                    x < ROBOT_EYES_X || x >= ROBOT_EYES_X + ROBOT_EYES_WIDTH) {
+                    assert(ssd1306_fb[p * SSD1306_WIDTH + x] == 0);
+                }
+            }
+        }
         /* Periodicity and independence from previous framebuffer contents. */
         ssd1306_fill(0xFF);
         robot_eyes_draw(ms + 8000);

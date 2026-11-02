@@ -6,6 +6,7 @@
  * off = I2C bus stuck.
  */
 #include "clock.h"
+#include "frame_schedule.h"
 #include "i2c.h"
 #include "robot_eyes.h"
 #include "ssd1306.h"
@@ -19,13 +20,13 @@
 #define BLINK_ERR_MS  100u
 #define POWER_UP_MS   100u /* let the OLED's supply settle */
 
-/* 30 ms leaves room for the ~23 ms DMA flush (~33 fps). */
-#define FRAME_MS 30u
 #define TICK_MS  4000u
 
 /* Read from the debugger to check the frame rate and errors. */
 volatile uint32_t frames_drawn;
+volatile uint32_t frames_completed;
 volatile uint32_t frame_errors;
+volatile uint32_t max_flush_ms;
 
 static void led_init(void)
 {
@@ -78,6 +79,12 @@ int main(void)
     int oled_ok = ssd1306_init();
     log_result("oled init", oled_ok);
     ssd1306_fill(0x00);
+    /* Clear the whole panel once, including pixels outside the eye window. */
+    int panel_cleared = ssd1306_flush();
+    log_result("oled clear", panel_cleared);
+    if (!panel_cleared) {
+        frame_errors++;
+    }
 
     /* Non-blocking loop: each job runs when its time comes, judged by millis().
      * (int32_t)(now - next) >= 0 means "now has reached next", wrap-safe. */
@@ -85,7 +92,10 @@ int main(void)
     uint32_t now = millis();
     uint32_t next_frame = now, next_led = now, next_tick = now;
     uint32_t last_animation_ms = now, animation_ms = 0;
-    uint32_t tick = 0;
+    uint32_t tick = 0, frame_phase = 0;
+    uint32_t flush_started_ms = now, last_log_ms = now;
+    uint32_t last_log_frames = 0;
+    int transfer_pending = 0;
     int led = 0;
 
     for (;;) {
@@ -93,23 +103,46 @@ int main(void)
 
         /* Only touch the framebuffer once the previous DMA transfer is over. */
         int status = ssd1306_flush_poll();
-        if ((int32_t)(now - next_frame) >= 0 && status != I2C_BUSY) {
+        if (transfer_pending && status != I2C_BUSY) {
+            transfer_pending = 0;
             if (status == I2C_ERR) {
                 frame_errors++;
+            } else {
+                frames_completed++;
+                uint32_t duration = now - flush_started_ms;
+                if (duration > max_flush_ms) {
+                    max_flush_ms = duration;
+                }
             }
-            next_frame = now + FRAME_MS;
-
+        }
+        /* Retry a failed startup clear, without starving LED/status jobs. */
+        if (!panel_cleared && (int32_t)(now - next_frame) >= 0 && status != I2C_BUSY) {
+            ssd1306_fill(0);
+            panel_cleared = ssd1306_flush();
+            if (!panel_cleared) {
+                frame_errors++;
+            }
+            now = millis();
+            frame_schedule_next(&next_frame, &frame_phase, now);
+        }
+        if (panel_cleared && (int32_t)(now - next_frame) >= 0 && status != I2C_BUSY) {
             /* Accumulate elapsed time modulo the loop, including millis()
              * wrap and slow bit-bang frames, without changing animation speed. */
             animation_ms = (animation_ms + (uint32_t)(now - last_animation_ms)) % 8000u;
             last_animation_ms = now;
             robot_eyes_draw(animation_ms);
 
-            if (ssd1306_flush_start()) {
+            flush_started_ms = millis();
+            if (ssd1306_flush_region_start(ROBOT_EYES_X, ROBOT_EYES_PAGE,
+                                           ROBOT_EYES_WIDTH, ROBOT_EYES_PAGES)) {
                 frames_drawn++;
+                transfer_pending = 1;
             } else {
                 frame_errors++;
             }
+            /* Use time after the start call: bit-bang may have blocked for
+             * an entire transfer. Skip missed slots rather than catch up. */
+            frame_schedule_next(&next_frame, &frame_phase, millis());
         }
 
         if ((int32_t)(now - next_led) >= 0) {
@@ -130,6 +163,13 @@ int main(void)
             uart_put_u32(now);
             uart_puts(" ms, frames ");
             uart_put_u32(frames_drawn);
+            uart_puts(", fps x10 ");
+            uint32_t elapsed = now - last_log_ms;
+            uart_put_u32(elapsed ? (frames_completed - last_log_frames) * 10000u / elapsed : 0);
+            last_log_ms = now;
+            last_log_frames = frames_completed;
+            uart_puts(", max flush ms ");
+            uart_put_u32(max_flush_ms);
             uart_puts(", frame errors ");
             uart_put_u32(frame_errors);
             uart_putc('\n');

@@ -24,6 +24,13 @@ int ssd1306_flush(void);             /* send the whole framebuffer; 1 on success
 int ssd1306_flush_start(void);       /* 1 if the transfer started */
 int ssd1306_flush_poll(void);
 
+/* Page-aligned rectangle, copied into a private DMA staging buffer.
+ * x/page are the first column/page; width/pages are counts, not end indices.
+ * Returns 0 for invalid bounds, a busy transfer, or command/header failure.
+ * Same wait-before-drawing rule as the full-screen flush. */
+int ssd1306_flush_region_start(uint32_t x, uint32_t page,
+                               uint32_t width, uint32_t pages);
+
 void ssd1306_clear_page(uint32_t page); /* zero one 8-pixel-high row */
 
 /* Text, 5x7 font in a 6-pixel cell. Rows are page-aligned: page 0..7 = y 0, 8, .. 56.

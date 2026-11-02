@@ -14,6 +14,8 @@
 #define CTRL_DATA 0x40u
 
 uint8_t ssd1306_fb[SSD1306_FB_SIZE];
+/* Pack page slices into one contiguous DMA source. Never overwrite in flight. */
+static uint8_t region_buf[SSD1306_FB_SIZE];
 
 /* One I2C transaction: START, address+W, control byte, payload, STOP.
  * Stops at the first NACK. */
@@ -59,27 +61,53 @@ void ssd1306_fill(uint8_t pattern)
     }
 }
 
-int ssd1306_flush_start(void)
+static int flush_window(uint32_t x, uint32_t page, uint32_t width,
+                        uint32_t pages, const uint8_t *data)
 {
-    /* Reset the write window to the full screen so the 1024 bytes land at
-     * column 0, page 0 and wrap through all 8 pages (horizontal mode). */
-    static const uint8_t window[] = {
-        0x21, 0, SSD1306_WIDTH - 1,         /* column address: 0..127 */
-        0x22, 0, SSD1306_HEIGHT / 8u - 1,   /* page address: 0..7 */
+    /* SSD1306 §10.1.3–5: horizontal addressing wraps within this window. */
+    const uint8_t window[] = {
+        0x21, (uint8_t)x, (uint8_t)(x + width - 1u),
+        0x22, (uint8_t)page, (uint8_t)(page + pages - 1u),
     };
     if (!send(CTRL_CMD, window, sizeof window)) {
         return 0;
     }
 
-    /* Header bytes go out synchronously; the 1024-byte body is handed to
+    /* Header bytes go out synchronously; the packed body is handed to
      * i2c_write_async(), which also sends the STOP when it's done. */
     i2c_start();
     if (!i2c_write_byte((uint8_t)(SSD1306_ADDR << 1)) || !i2c_write_byte(CTRL_DATA)) {
         i2c_stop();
         return 0;
     }
-    i2c_write_async(ssd1306_fb, SSD1306_FB_SIZE);
+    i2c_write_async(data, width * pages);
     return 1;
+}
+
+int ssd1306_flush_start(void)
+{
+    if (ssd1306_flush_poll() == I2C_BUSY) {
+        return 0;
+    }
+    return flush_window(0, 0, SSD1306_WIDTH, SSD1306_HEIGHT / 8u, ssd1306_fb);
+}
+
+int ssd1306_flush_region_start(uint32_t x, uint32_t page,
+                               uint32_t width, uint32_t pages)
+{
+    if (x >= SSD1306_WIDTH || page >= SSD1306_HEIGHT / 8u ||
+        width == 0 || width > SSD1306_WIDTH - x ||
+        pages == 0 || pages > SSD1306_HEIGHT / 8u - page ||
+        ssd1306_flush_poll() == I2C_BUSY) {
+        return 0;
+    }
+    uint32_t n = 0;
+    for (uint32_t p = page; p < page + pages; p++) {
+        for (uint32_t col = x; col < x + width; col++) {
+            region_buf[n++] = ssd1306_fb[p * SSD1306_WIDTH + col];
+        }
+    }
+    return flush_window(x, page, width, pages, region_buf);
 }
 
 int ssd1306_flush_poll(void)
