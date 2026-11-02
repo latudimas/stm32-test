@@ -1,12 +1,13 @@
 /*
- * "HELLO WORLD" scrolling right-to-left on a 128x64 SSD1306, with a tick
- * counter below it. Status log on USART1: tio -b 115200 /dev/cu.usbmodem1102
+ * Animated robot eyes on a 128x64 SSD1306: blink and look left/right.
+ * Status log on USART1: tio -b 115200 /dev/cu.usbmodem1102
  *
  * PC13 LED (active low): 2 s blink = display OK, fast blink = display error,
  * off = I2C bus stuck.
  */
 #include "clock.h"
 #include "i2c.h"
+#include "robot_eyes.h"
 #include "ssd1306.h"
 #include "stm32f103.h"
 #include "systick.h"
@@ -18,13 +19,7 @@
 #define BLINK_ERR_MS  100u
 #define POWER_UP_MS   100u /* let the OLED's supply settle */
 
-#define MESSAGE      "HELLO WORLD"
-#define MESSAGE_W    ((int32_t)(sizeof MESSAGE - 1u) * SSD1306_CHAR_W) /* 66 px */
-#define MESSAGE_PAGE 3u    /* y 24..31, closest text row to the middle */
-#define TICK_X       ((SSD1306_WIDTH - (uint32_t)MESSAGE_W) / 2u)
-#define TICK_PAGE    6u
-
-/* 1 px per frame; 30 ms leaves room for the ~23 ms DMA flush (~33 fps). */
+/* 30 ms leaves room for the ~23 ms DMA flush (~33 fps). */
 #define FRAME_MS 30u
 #define TICK_MS  4000u
 
@@ -53,25 +48,6 @@ static void log_result(const char *what, int ok)
 {
     uart_puts(what);
     uart_puts(ok ? ": ok\n" : ": FAIL\n");
-}
-
-/* "TICK 123" into out (needs 16 bytes). */
-static void format_tick(uint32_t n, char *out)
-{
-    const char *prefix = "TICK ";
-    while (*prefix) {
-        *out++ = *prefix++;
-    }
-    char digits[10];
-    int k = 0;
-    do {
-        digits[k++] = (char)('0' + n % 10u);
-        n /= 10u;
-    } while (n);
-    while (k) {
-        *out++ = digits[--k];
-    }
-    *out = '\0';
 }
 
 int main(void)
@@ -108,11 +84,9 @@ int main(void)
     uint32_t led_ms = oled_ok ? BLINK_OK_MS : BLINK_ERR_MS;
     uint32_t now = millis();
     uint32_t next_frame = now, next_led = now, next_tick = now;
-    int32_t scroll_x = SSD1306_WIDTH; /* start just off the right edge */
+    uint32_t last_animation_ms = now, animation_ms = 0;
     uint32_t tick = 0;
     int led = 0;
-    char tick_text[16];
-    format_tick(tick, tick_text);
 
     for (;;) {
         now = millis();
@@ -125,13 +99,11 @@ int main(void)
             }
             next_frame = now + FRAME_MS;
 
-            ssd1306_clear_page(MESSAGE_PAGE);
-            ssd1306_draw_string(scroll_x, MESSAGE_PAGE, MESSAGE);
-            if (--scroll_x < -MESSAGE_W) {
-                scroll_x = SSD1306_WIDTH; /* fully gone on the left: re-enter right */
-            }
-            ssd1306_clear_page(TICK_PAGE);
-            ssd1306_draw_string(TICK_X, TICK_PAGE, tick_text);
+            /* Accumulate elapsed time modulo the loop, including millis()
+             * wrap and slow bit-bang frames, without changing animation speed. */
+            animation_ms = (animation_ms + (uint32_t)(now - last_animation_ms)) % 8000u;
+            last_animation_ms = now;
+            robot_eyes_draw(animation_ms);
 
             if (ssd1306_flush_start()) {
                 frames_drawn++;
@@ -161,7 +133,7 @@ int main(void)
             uart_puts(", frame errors ");
             uart_put_u32(frame_errors);
             uart_putc('\n');
-            format_tick(++tick, tick_text); /* drawn by the next frame */
+            tick++;
         }
     }
 }

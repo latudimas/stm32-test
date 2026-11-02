@@ -10,7 +10,7 @@ TARGET = $(BUILD)/firmware
 # I2C driver: hw (I2C1 peripheral, 400 kHz) or bitbang (GPIO). e.g. `make I2C=bitbang flash`
 I2C ?= hw
 SRCS = src/startup.c src/main.c src/i2c_$(I2C).c src/ssd1306.c src/font5x7.c \
-       src/uart.c src/systick.c src/clock.c
+       src/uart.c src/systick.c src/clock.c src/robot_eyes.c
 OBJS = $(SRCS:src/%.c=$(BUILD)/%.o)
 LDSCRIPT = stm32f103.ld
 

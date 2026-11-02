@@ -1,7 +1,7 @@
 # stm32-test
 
-"HELLO WORLD" scrolling across a 0.96" SSD1306 OLED, driven by an STM32F103
-Blue Pill, written from scratch in C. No HAL, no CMSIS, no Arduino, no display
+Grok-inspired animated robot eyes on a 0.96" SSD1306 OLED, driven by an
+STM32F103 Blue Pill, written from scratch in C. No HAL, no CMSIS, no Arduino, no display
 library, no C library: every register is set by hand from the reference manual.
 
 ## What's inside
@@ -10,6 +10,7 @@ library, no C library: every register is set by hand from the reference manual.
 - SysTick timebase: `millis()`, `delay_ms()`, `delay_us()`
 - I2C two ways: hardware I2C1 at 400 kHz, or bit-banged GPIO
 - DMA + interrupt screen updates (full 1 KB frame in ~23 ms, CPU free meanwhile)
+- Robot eyes: smooth left/right glances, blinks and a playful double blink
 - SSD1306 driver with a 5x7 ASCII font and clipped text drawing
 - USART1 status log over the debugger's USB-UART bridge
 
@@ -45,6 +46,15 @@ tio -b 115200 /dev/cu.usbmodem1102   # watch the log (port name varies)
 
 `make I2C=bitbang flash` uses the bit-banged I2C driver instead.
 `make openocd` + `make gdb` (two terminals) for debugging.
+
+## Animation
+Two bright rounded eyes follow an eight-second loop: blink, look left, look
+right, return to center, then double blink. Frames are drawn about every 30 ms
+with hardware I2C; the bit-banged driver draws fewer frames but keeps the same
+animation timing. Drawing waits for DMA completion so the framebuffer is never
+changed during a transfer. UART still logs frame counts and errors every 4 s.
+
+The pose timeline and eye dimensions live in `src/robot_eyes.c`.
 
 ## Status LED (PC13)
 - 2 s blink: running, display OK
