@@ -19,6 +19,7 @@
             gnumake
             openocd # SWD: probe, flash, GDB server on :3333
             tio # USB-UART bridge on the debugger (115200 8N1)
+            cbmc # bounded model checker for `make verify` (host only)
           ]
           # st-info/st-flash: optional, and nixpkgs doesn't build it on Darwin.
           ++ lib.optional (lib.meta.availableOn stdenv.hostPlatform stlink) stlink;

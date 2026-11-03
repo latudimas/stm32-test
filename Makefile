@@ -24,7 +24,7 @@ LDFLAGS = -nostdlib -T $(LDSCRIPT) -Wl,--gc-sections \
 
 OPENOCD = openocd -f interface/stlink.cfg -f target/stm32f1x.cfg
 
-.PHONY: all flash openocd gdb test clean FORCE
+.PHONY: all flash openocd gdb test verify clean FORCE
 
 all: $(TARGET).elf $(TARGET).bin
 
@@ -61,6 +61,14 @@ gdb: $(TARGET).elf
 # Host-only tests (HOST_CC defaults to cc), with ASan/UBSan. No flashing.
 test:
 	sh tests/run.sh
+
+# Host-only CBMC proofs: properties hold for every input, not just samples.
+# --unwinding-assertions fails the proof if a loop could run past --unwind.
+CBMC_FLAGS = -Isrc --unwind 4 --unwinding-assertions --bounds-check \
+             --pointer-check --signed-overflow-check --div-by-zero-check \
+             --undefined-shift-check
+verify:
+	cbmc $(CBMC_FLAGS) verify/frame_schedule_proof.c
 
 clean:
 	rm -rf $(BUILD)

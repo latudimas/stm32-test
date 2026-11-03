@@ -10,6 +10,7 @@ Tools come from the Nix flake (`direnv allow`, or `nix develop`).
 make                  # build/firmware.elf (hardware I2C1 + DMA)
 make I2C=bitbang      # bit-banged I2C instead
 make test             # host regressions with ASan/UBSan (no board access)
+make verify           # host CBMC proofs, ~1 min (no board access)
 make flash            # program via ST-Link + OpenOCD, verify, reset
 make openocd          # GDB server on :3333; then `make gdb`
 tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
@@ -27,6 +28,7 @@ tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
 - `src/robot_eyes.c`, `src/frame_schedule.h`: eye animation and 60 Hz deadlines
 - `src/motion.c`: oscillatory wobble/shake classifier; 1.2 s squint / 2 s dizzy quiet return
 - `src/main.c`: motion-reactive eyes + accelerometer acquisition/logging
+- `verify/`: CBMC proof harnesses (all-inputs properties; see `make verify`)
 
 ## Rules
 - No vendor HAL/LL, CMSIS, Arduino or display libraries; no C library (`-nostdlib`).
