@@ -64,11 +64,11 @@ test:
 
 # Host-only CBMC proofs: properties hold for every input, not just samples.
 # --unwinding-assertions fails the proof if a loop could run past --unwind.
-CBMC_FLAGS = -Isrc --unwind 4 --unwinding-assertions --bounds-check \
-             --pointer-check --signed-overflow-check --div-by-zero-check \
-             --undefined-shift-check
+CBMC_FLAGS = -Isrc --unwinding-assertions --bounds-check --pointer-check \
+             --signed-overflow-check --div-by-zero-check --undefined-shift-check
 verify:
-	cbmc $(CBMC_FLAGS) verify/frame_schedule_proof.c
+	cbmc $(CBMC_FLAGS) --unwind 4 verify/frame_schedule_proof.c
+	cbmc $(CBMC_FLAGS) --unwind 5 verify/uart_queue_proof.c
 
 clean:
 	rm -rf $(BUILD)
