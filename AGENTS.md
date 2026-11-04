@@ -36,3 +36,17 @@ tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
 - Derive timing from `cpu_hz` / `pclk*_hz`, never hard-coded clock values.
 - Don't modify `ssd1306_fb` while `ssd1306_flush_poll()` returns `I2C_BUSY`.
 - Keep it small and readable; build both `I2C=hw` and `I2C=bitbang` with no warnings.
+
+## Verification
+`verify/` holds the specs: read those, not just the code, when reviewing changes.
+- Run `make test` and `make verify` before committing; both must pass.
+- Treat a failing proof as a bug in `src/` until shown otherwise. Fix the code,
+  not the proof.
+- Don't weaken a spec to get a pass: no deleting or loosening assertions, adding
+  `__CPROVER_assume`, dropping CBMC checks or `--unwinding-assertions`, or
+  narrowing inputs. If a spec really is wrong, ask first and explain why.
+- New or changed pure logic needs a proof in `verify/`, or an exhaustive host
+  test when the input space is small enough to enumerate.
+- State every hardware assumption in the proof's header comment.
+- Keep `make verify` around one minute. If a proof is too slow, split it; don't
+  weaken it.
