@@ -58,6 +58,29 @@ int main(void)
     count = 0;
     assert(ssd1306_flush_region_start(127, 7, 1, 1));
     assert(payload_len == 1 && payload[0] == 0xFF);
+    /* All 297,216 valid rectangles: exhaustive, so this covers every accepted
+     * input. CBMC covers the rejected ones (verify/ssd1306_draw_proof.c). */
+    for (uint32_t i = 0; i < SSD1306_FB_SIZE; i++) {
+        ssd1306_fb[i] = (uint8_t)(i * 7u + i / 128u);
+    }
+    for (uint32_t x = 0; x < 128; x++) {
+        for (uint32_t w = 1; w <= 128 - x; w++) {
+            for (uint32_t pg = 0; pg < 8; pg++) {
+                for (uint32_t n = 1; n <= 8 - pg; n++) {
+                    status = I2C_DONE;
+                    count = 0;
+                    assert(ssd1306_flush_region_start(x, pg, w, n));
+                    assert(bytes[3] == x && bytes[4] == x + w - 1);
+                    assert(bytes[6] == pg && bytes[7] == pg + n - 1);
+                    assert(payload_len == w * n);
+                    for (uint32_t r = 0; r < n; r++) {
+                        assert(memcmp(payload + r * w,
+                                      ssd1306_fb + (pg + r) * 128 + x, w) == 0);
+                    }
+                }
+            }
+        }
+    }
     status = I2C_ERR;
     count = 0;
     assert(ssd1306_flush_start());
