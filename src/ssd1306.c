@@ -138,7 +138,10 @@ void ssd1306_clear_page(uint32_t page)
 
 void ssd1306_draw_char(int32_t x, uint32_t page, char c)
 {
-    if (page >= SSD1306_HEIGHT / 8u) {
+    /* Fully off-screen glyphs draw nothing; this also keeps x + col below
+     * from overflowing for x near INT32_MAX (found by verify/, CBMC). */
+    if (page >= SSD1306_HEIGHT / 8u ||
+        x >= (int32_t)SSD1306_WIDTH || x <= -(int32_t)FONT_W) {
         return;
     }
     uint8_t ch = (uint8_t)c;

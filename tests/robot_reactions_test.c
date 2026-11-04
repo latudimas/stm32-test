@@ -32,7 +32,9 @@ int main(int argc, char **argv)
     for (enum motion_state state = MOTION_DEFAULT; state <= MOTION_CONFUSED; state++) {
         robot_eyes_draw(0);
         robot_eyes_init(&eyes, 0);
-        for (unsigned ms = 0; ms < 8000; ms += 8) {
+        /* Every elapsed ms of the 8 s loop, so every reachable frame (all 128
+         * spiral phases, every squint pose): exhaustive, not sampled. */
+        for (unsigned ms = 0; ms < 8000; ms++) {
             robot_eyes_animate(&eyes, state, ms);
             check_window();
         }

@@ -24,7 +24,7 @@ LDFLAGS = -nostdlib -T $(LDSCRIPT) -Wl,--gc-sections \
 
 OPENOCD = openocd -f interface/stlink.cfg -f target/stm32f1x.cfg
 
-.PHONY: all flash openocd gdb test clean FORCE
+.PHONY: all flash openocd gdb test verify clean FORCE
 
 all: $(TARGET).elf $(TARGET).bin
 
@@ -61,6 +61,32 @@ gdb: $(TARGET).elf
 # Host-only tests (HOST_CC defaults to cc), with ASan/UBSan. No flashing.
 test:
 	sh tests/run.sh
+
+# Host-only CBMC proofs: properties hold for every input, not just samples.
+# --unwinding-assertions fails the proof if a loop could run past --unwind.
+CBMC_FLAGS = -Isrc --unwinding-assertions --bounds-check --pointer-check \
+             --signed-overflow-check --div-by-zero-check --undefined-shift-check
+SSD1306_PROOF = $(CBMC_FLAGS) verify/ssd1306_draw_proof.c src/ssd1306.c src/font5x7.c
+PROOFS = proof-frame proof-uart proof-draw-char proof-draw-string \
+         proof-clear-page proof-region-rejects
+.PHONY: $(PROOFS)
+
+# Independent proofs run side by side; -O keeps each one's output together.
+verify:
+	$(MAKE) -j -O $(PROOFS)
+
+proof-frame:
+	cbmc $(CBMC_FLAGS) --unwind 4 verify/frame_schedule_proof.c
+proof-uart:
+	cbmc $(CBMC_FLAGS) --unwind 5 verify/uart_queue_proof.c
+proof-draw-char:
+	cbmc $(SSD1306_PROOF) --function proof_draw_char --unwind 6
+proof-draw-string:
+	cbmc $(SSD1306_PROOF) --function proof_draw_string --unwind 6
+proof-clear-page:
+	cbmc $(SSD1306_PROOF) --function proof_clear_page --unwind 129
+proof-region-rejects:
+	cbmc $(SSD1306_PROOF) --function proof_flush_region_rejects --unwind 1
 
 clean:
 	rm -rf $(BUILD)

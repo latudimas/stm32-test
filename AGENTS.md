@@ -10,6 +10,7 @@ Tools come from the Nix flake (`direnv allow`, or `nix develop`).
 make                  # build/firmware.elf (hardware I2C1 + DMA)
 make I2C=bitbang      # bit-banged I2C instead
 make test             # host regressions with ASan/UBSan (no board access)
+make verify           # host CBMC proofs, ~1 min (no board access)
 make flash            # program via ST-Link + OpenOCD, verify, reset
 make openocd          # GDB server on :3333; then `make gdb`
 tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
@@ -27,6 +28,7 @@ tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
 - `src/robot_eyes.c`, `src/frame_schedule.h`: eye animation and 60 Hz deadlines
 - `src/motion.c`: oscillatory wobble/shake classifier; 1.2 s squint / 2 s dizzy quiet return
 - `src/main.c`: motion-reactive eyes + accelerometer acquisition/logging
+- `verify/`: CBMC proof harnesses (all-inputs properties; see `make verify`)
 
 ## Rules
 - No vendor HAL/LL, CMSIS, Arduino or display libraries; no C library (`-nostdlib`).
@@ -34,3 +36,17 @@ tio -b 115200 /dev/cu.usbmodem1102   # serial log (only one reader at a time)
 - Derive timing from `cpu_hz` / `pclk*_hz`, never hard-coded clock values.
 - Don't modify `ssd1306_fb` while `ssd1306_flush_poll()` returns `I2C_BUSY`.
 - Keep it small and readable; build both `I2C=hw` and `I2C=bitbang` with no warnings.
+
+## Verification
+`verify/` holds the specs: read those, not just the code, when reviewing changes.
+- Run `make test` and `make verify` before committing; both must pass.
+- Treat a failing proof as a bug in `src/` until shown otherwise. Fix the code,
+  not the proof.
+- Don't weaken a spec to get a pass: no deleting or loosening assertions, adding
+  `__CPROVER_assume`, dropping CBMC checks or `--unwinding-assertions`, or
+  narrowing inputs. If a spec really is wrong, ask first and explain why.
+- New or changed pure logic needs a proof in `verify/`, or an exhaustive host
+  test when the input space is small enough to enumerate.
+- State every hardware assumption in the proof's header comment.
+- Keep `make verify` around one minute. If a proof is too slow, split it; don't
+  weaken it.
